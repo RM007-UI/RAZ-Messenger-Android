@@ -33,6 +33,7 @@ def set_string(xml: str, name: str, value: str) -> str:
 def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
         print("Usage: TG_API_ID=... TG_API_HASH=... python3 scripts/apply_branding.py [upstream-dir]")
+        print("For a build-only test, set RAZ_ALLOW_UPSTREAM_TEST_API=1 and leave both TG_API_* variables empty.")
         return 0
 
     upstream = Path(sys.argv[1] if len(sys.argv) > 1 else "upstream").resolve()
@@ -50,9 +51,21 @@ def main() -> int:
 
     api_id_raw = os.environ.get("TG_API_ID", "").strip()
     api_hash = os.environ.get("TG_API_HASH", "").strip()
-    if not api_id_raw.isdigit() or int(api_id_raw) <= 0:
-        raise SystemExit("TG_API_ID is missing or invalid; add it as a GitHub Actions secret")
-    if not re.fullmatch(r"[0-9a-fA-F]{32}", api_hash):
+    use_upstream_test_api = False
+
+    if not api_id_raw and not api_hash:
+        if os.environ.get("RAZ_ALLOW_UPSTREAM_TEST_API", "").strip() != "1":
+            raise SystemExit(
+                "TG_API_ID/TG_API_HASH are missing. For a test-only build, explicitly set "
+                "RAZ_ALLOW_UPSTREAM_TEST_API=1; for a functional app, provide your own credentials."
+            )
+        use_upstream_test_api = True
+        print("WARNING: Building with the upstream sample API credentials for testing only; do not distribute this APK.")
+    elif not api_id_raw or not api_hash:
+        raise SystemExit("TG_API_ID and TG_API_HASH must either both be set or both be empty")
+    elif not api_id_raw.isdigit() or int(api_id_raw) <= 0:
+        raise SystemExit("TG_API_ID is invalid")
+    elif not re.fullmatch(r"[0-9a-fA-F]{32}", api_hash):
         raise SystemExit("TG_API_HASH must be the 32-character value from my.telegram.org")
 
     gradle_props = upstream / "gradle.properties"
@@ -76,18 +89,24 @@ def main() -> int:
     strings_path.write_text(text, encoding="utf-8")
 
     text = vars_path.read_text(encoding="utf-8")
-    text = one(
-        r"public static int APP_ID\s*=\s*\d+\s*;",
-        f"public static int APP_ID = {int(api_id_raw)};",
-        text,
-        "BuildVars.APP_ID",
-    )
-    text = one(
-        r'public static String APP_HASH\s*=\s*"[^"]*"\s*;',
-        f'public static String APP_HASH = "{api_hash}";',
-        text,
-        "BuildVars.APP_HASH",
-    )
+    if use_upstream_test_api:
+        upstream_id = re.search(r"public static int APP_ID\s*=\s*(\d+)\s*;", text)
+        upstream_hash = re.search(r'public static String APP_HASH\s*=\s*"([0-9a-fA-F]{32})"\s*;', text)
+        if not upstream_id or int(upstream_id.group(1)) <= 0 or not upstream_hash:
+            raise SystemExit("The pinned upstream source has no recognizable built-in test API credentials; refusing to build.")
+    else:
+        text = one(
+            r"public static int APP_ID\s*=\s*\d+\s*;",
+            f"public static int APP_ID = {int(api_id_raw)};",
+            text,
+            "BuildVars.APP_ID",
+        )
+        text = one(
+            r'public static String APP_HASH\s*=\s*"[^"]*"\s*;',
+            f'public static String APP_HASH = "{api_hash}";',
+            text,
+            "BuildVars.APP_HASH",
+        )
     text = one(
         r"public static boolean CHECK_UPDATES\s*=\s*true\s*;",
         "public static boolean CHECK_UPDATES = false;",
