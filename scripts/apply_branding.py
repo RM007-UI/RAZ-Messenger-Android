@@ -178,6 +178,22 @@ def main() -> int:
         except (ValueError, TypeError) as exc:
             raise RuntimeError(f"Could not safely update {firebase_path.relative_to(upstream)}: {exc}") from exc
 
+    # Google Services Gradle plugin reads the app module's own configuration.
+    app_firebase_path = upstream / "TMessagesProj_App/google-services.json"
+    try:
+        app_data = json.loads(app_firebase_path.read_text(encoding="utf-8"))
+        app_matched = 0
+        for client in app_data.get("client", []):
+            app_info = client.get("client_info", {}).get("android_client_info", {})
+            if app_info.get("package_name") == "org.telegram.messenger.beta":
+                app_info["package_name"] = package_id + ".beta"
+                app_matched += 1
+        if app_matched != 1:
+            raise RuntimeError(f"Expected one Firebase beta client in app module; found {app_matched}")
+        app_firebase_path.write_text(json.dumps(app_data, indent=2) + "\\n", encoding="utf-8")
+    except (OSError, ValueError, TypeError) as exc:
+        raise RuntimeError(f"Could not safely update app-module google-services.json: {exc}") from exc
+
     icon_src = ROOT / "assets/icons/raz_launcher.xml"
     icon_dst = upstream / "TMessagesProj/src/main/res/drawable/raz_launcher.xml"
     if not icon_src.is_file():
