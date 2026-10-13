@@ -73,8 +73,13 @@ def main() -> int:
     strings_path = upstream / "TMessagesProj/src/main/res/values/strings.xml"
     manifest_path = upstream / "TMessagesProj/src/main/AndroidManifest.xml"
     app_gradle = upstream / "TMessagesProj_App/build.gradle"
-    firebase_path = upstream / "TMessagesProj/google-services.json"
-    required = (gradle_props, vars_path, strings_path, manifest_path, app_gradle, firebase_path)
+    # Telegram keeps Google Services configuration in both the app and library module.
+    # The APK application module consumes TMessagesProj_App/google-services.json.
+    firebase_paths = (
+        upstream / "TMessagesProj/google-services.json",
+        upstream / "TMessagesProj_App/google-services.json",
+    )
+    required = (gradle_props, vars_path, strings_path, manifest_path, app_gradle, *firebase_paths)
     missing = [str(path.relative_to(upstream)) for path in required if not path.is_file()]
     if missing:
         raise SystemExit("Unexpected upstream source layout; missing: " + ", ".join(missing))
@@ -154,20 +159,24 @@ def main() -> int:
         raise RuntimeError("Could not locate DefaultIcon launcher alias in AndroidManifest.xml")
     manifest_path.write_text(manifest, encoding="utf-8")
 
-    # Change only the upstream beta Firebase client; preserve the other client records.
-    try:
-        data = json.loads(firebase_path.read_text(encoding="utf-8"))
-        matched = 0
-        for client in data.get("client", []):
-            app = client.get("client_info", {}).get("android_client_info", {})
-            if app.get("package_name") == "org.telegram.messenger.beta":
-                app["package_name"] = package_id + ".beta"
-                matched += 1
-        if matched != 1:
-            raise RuntimeError(f"Expected one Firebase beta client; found {matched}")
-        firebase_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    except (ValueError, TypeError) as exc:
-        raise RuntimeError(f"Could not safely update google-services.json: {exc}") from exc
+    # Change the beta Firebase client in BOTH module config files. Google Services
+    # processing runs for TMessagesProj_App, so updating only TMessagesProj is insufficient.
+    for firebase_path in firebase_paths:
+        try:
+            data = json.loads(firebase_path.read_text(encoding="utf-8"))
+            matched = 0
+            for client in data.get("client", []):
+                app = client.get("client_info", {}).get("android_client_info", {})
+                if app.get("package_name") == "org.telegram.messenger.beta":
+                    app["package_name"] = package_id + ".beta"
+                    matched += 1
+            if matched != 1:
+                raise RuntimeError(
+                    f"{firebase_path.relative_to(upstream)}: expected one Firebase beta client; found {matched}"
+                )
+            firebase_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        except (ValueError, TypeError) as exc:
+            raise RuntimeError(f"Could not safely update {firebase_path.relative_to(upstream)}: {exc}") from exc
 
     icon_src = ROOT / "assets/icons/raz_launcher.xml"
     icon_dst = upstream / "TMessagesProj/src/main/res/drawable/raz_launcher.xml"
