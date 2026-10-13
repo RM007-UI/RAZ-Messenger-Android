@@ -81,14 +81,26 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
-          path = Path("upstream/TMessagesProj_App/build.gradle")
-          source = path.read_text()
-          pattern = r'(?m)^([ \t]*afat[ \t]*\{[ \t]*\n[ \t]*ndk[ \t]*\{[ \t]*\n[ \t]*abiFilters[ \t]+)[^\n]+'
-          updated, count = re.subn(pattern, r'\1"arm64-v8a"', source, count=1)
-          if count != 1:
-              raise SystemExit("Could not locate the afat ABI filter; refusing an unsafe build edit")
-          path.write_text(updated)
-          print("Configured afat flavor for arm64-v8a only")
+          app_path = Path("upstream/TMessagesProj_App/build.gradle")
+          app_source = app_path.read_text()
+          app_pattern = r'(?m)^([ \t]*afat[ \t]*\{[ \t]*\n[ \t]*ndk[ \t]*\{[ \t]*\n[ \t]*abiFilters[ \t]+)[^\n]+'
+          app_updated, app_count = re.subn(app_pattern, r'\1"arm64-v8a"', app_source, count=1)
+          if app_count != 1:
+              raise SystemExit("Could not locate the app afat ABI filter; refusing an unsafe build edit")
+          app_path.write_text(app_updated)
+
+          library_path = Path("upstream/TMessagesProj/build.gradle")
+          library_source = library_path.read_text()
+          library_anchor = '        minSdkVersion 23\n        targetSdkVersion 36\n'
+          if library_source.count(library_anchor) != 1:
+              raise SystemExit("Could not locate the library defaultConfig SDK settings; refusing an unsafe build edit")
+          library_updated = library_source.replace(
+              library_anchor,
+              library_anchor + '\n        ndk {\n            abiFilters "arm64-v8a"\n        }\n',
+              1,
+          )
+          library_path.write_text(library_updated)
+          print("Configured both app and Telegram library native builds for arm64-v8a only")
           PY
 
       - name: Build ARM64 debug APK
