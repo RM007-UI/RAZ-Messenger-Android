@@ -124,9 +124,10 @@ def main() -> int:
 
     def patch_alias(match: re.Match[str]) -> str:
         attrs = match.group(1)
+        # activity-alias supports android:icon; roundIcon belongs on application.
         attrs = re.sub(r'\s+android:icon="[^"]*"', "", attrs)
         attrs = re.sub(r'\s+android:roundIcon="[^"]*"', "", attrs)
-        attrs += ' android:icon="@drawable/raz_launcher" android:roundIcon="@drawable/raz_launcher"'
+        attrs += ' android:icon="@drawable/raz_launcher"'
         return attrs + match.group(2)
 
     manifest, count = re.subn(pattern, patch_alias, manifest, count=1, flags=re.S)
