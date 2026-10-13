@@ -1,0 +1,6 @@
+{
+  "app_name": "RAZ",
+  "app_name_debug": "RAZ Dev",
+  "package_id": "com.rm007.raz",
+  "upstream_repository": "https://github.com/DrKLO/Telegram.git"
+}
