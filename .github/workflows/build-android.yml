@@ -83,14 +83,15 @@ jobs:
           import re
           path = Path("upstream/TMessagesProj_App/build.gradle")
           source = path.read_text()
-          pattern = r'(?m)^([ \\t]*afat[ \\t]*\\{[ \\t]*\\n[ \\t]*ndk[ \\t]*\\{[ \\t]*\\n[ \\t]*abiFilters[ \\t]+)[^\\n]+'
-          updated, count = re.subn(pattern, r'\\1"arm64-v8a"', source, count=1)
+          pattern = r'(?m)^([ \t]*afat[ \t]*\{[ \t]*\n[ \t]*ndk[ \t]*\{[ \t]*\n[ \t]*abiFilters[ \t]+)[^\n]+'
+          updated, count = re.subn(pattern, r'\1"arm64-v8a"', source, count=1)
           if count != 1:
               raise SystemExit("Could not locate the afat ABI filter; refusing an unsafe build edit")
           path.write_text(updated)
           print("Configured afat flavor for arm64-v8a only")
+          PY
 
-          - name: Build ARM64 debug APK
+      - name: Build ARM64 debug APK
         env:
           GRADLE_OPTS: -Xmx6g -XX:MaxMetaspaceSize=1g
         shell: bash
