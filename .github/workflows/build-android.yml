@@ -1,0 +1,82 @@
+name: Build RAZ Android APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raz-android-build
+  cancel-in-progress: false
+
+jobs:
+  build-arm64:
+    name: Build debug APK (ARM64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      TG_API_ID: ${{ secrets.TG_API_ID }}
+      TG_API_HASH: ${{ secrets.TG_API_HASH }}
+    steps:
+      - name: Checkout RAZ customization files
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Validate API secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$TG_API_ID" =~ ^[0-9]+$ ]] || { echo 'Missing or invalid TG_API_ID secret'; exit 1; }
+          [[ "$TG_API_HASH" =~ ^[0-9a-fA-F]{32}$ ]] || { echo 'Missing or invalid TG_API_HASH secret'; exit 1; }
+
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.2.12479018' 'cmake;3.22.1'
+
+      - name: Download official Telegram Android source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --recursive --shallow-submodules --depth=1 https://github.com/DrKLO/Telegram.git upstream
+          git -C upstream submodule sync --recursive
+          git -C upstream submodule update --init --recursive --depth=1
+          echo "Upstream commit: $(git -C upstream rev-parse HEAD)" | tee upstream-commit.txt
+
+      - name: Apply RAZ branding
+        run: python3 scripts/apply_branding.py upstream
+
+      - name: Build ARM64 debug APK
+        env:
+          GRADLE_OPTS: -Xmx6g -XX:MaxMetaspaceSize=1g
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd upstream
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace :TMessagesProj_App:assembleAfatDebug
+
+      - name: Collect APK and source commit record
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifact
+          cp upstream/TMessagesProj_App/build/outputs/apk/afat/debug/app.apk artifact/RAZ-debug-arm64.apk
+          cp upstream-commit.txt artifact/
+
+      - name: Upload RAZ APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RAZ-debug-arm64
+          path: artifact/*
+          if-no-files-found: error
+          retention-days: 7
