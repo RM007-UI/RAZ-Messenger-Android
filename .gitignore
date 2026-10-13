@@ -1,0 +1,9 @@
+/upstream/
+/local.properties
+*.apk
+*.aab
+*.jks
+*.keystore
+.env
+__pycache__/
+*.py[cod]
