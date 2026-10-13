@@ -43,13 +43,18 @@ jobs:
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.2.12479018' 'cmake;3.22.1'
 
-      - name: Download official Telegram Android source
+      - name: Download pinned official Telegram Android source
+        env:
+          UPSTREAM_COMMIT: f32ffeec763f0bdbf4bec25b52d654f77bff733d
         shell: bash
         run: |
           set -euo pipefail
-          git clone --recursive --shallow-submodules --depth=1 https://github.com/DrKLO/Telegram.git upstream
+          git clone --depth=1 https://github.com/DrKLO/Telegram.git upstream
+          git -C upstream fetch --depth=1 origin "$UPSTREAM_COMMIT"
+          git -C upstream checkout --detach "$UPSTREAM_COMMIT"
           git -C upstream submodule sync --recursive
           git -C upstream submodule update --init --recursive --depth=1
+          test "$(git -C upstream rev-parse HEAD)" = "$UPSTREAM_COMMIT"
           echo "Upstream commit: $(git -C upstream rev-parse HEAD)" | tee upstream-commit.txt
 
       - name: Apply RAZ branding
