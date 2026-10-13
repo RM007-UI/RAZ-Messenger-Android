@@ -27,7 +27,7 @@ Keep API credentials in GitHub Actions secrets; never commit them to this reposi
 - Limits native compilation to ARM64 to reduce unnecessary build work.
 - Produces an unsigned-for-release / debug-signed test APK from the official Telegram Android Gradle task.
 
-The workflow fetches the current upstream default branch, so builds may change over time. The exact upstream commit is saved in the artifact as `upstream-commit.txt`.
+The workflow pins the official Telegram source to commit [`f32ffeec763f0bdbf4bec25b52d654f77bff733d`](https://github.com/DrKLO/Telegram/commit/f32ffeec763f0bdbf4bec25b52d654f77bff733d), verified against upstream on 13 October 2026. This makes the first build reproducible; the exact commit is also saved in the artifact as `upstream-commit.txt`.
 
 ## Known limitations
 
