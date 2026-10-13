@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: raz-android-build
+  group: raz-android-build-arm64-optimized
   cancel-in-progress: true
 
 jobs:
