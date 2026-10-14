@@ -172,15 +172,16 @@ jobs:
           cp config/brand.json "$overlay/config/"
           cp scripts/apply_branding.py "$overlay/scripts/"
           cp README.md LICENSE THIRD_PARTY_NOTICES.md BUILD_STATUS_FA.md "$overlay/"
-          cat > "$overlay/SIGNING_NOTES_FA.txt" <<'EOF'
-RAZ - یادداشت امضای نسخه آزمایشی
-
-این APK با کلید امضای debug ثابت برای بیلدهای شخصی RAZ امضا می‌شود.
-فینگرپرینت گواهی در فایل RAZ-signing-certificate-sha256.txt داخل بسته APK/Source artifact است.
-فایل debug.keystore به‌عنوان artifact جداگانه با نام RAZ-debug-signing-key-backup نگه‌داری می‌شود
-و workflow در اجرای بعدی ابتدا cache و سپس آخرین artifact خصوصی را برای بازیابی کلید بررسی می‌کند.
-این کلید و این APK مخصوص تست شخصی است؛ کلید debug را برای انتشار عمومی استفاده نکنید.
-برای انتشار عمومی باید کلید release جداگانه، نگهداری امن آن و تنظیم secrets انجام شود.
+          printf '%s\n' \
+            'RAZ - یادداشت امضای نسخه آزمایشی' \
+            '' \
+            'این APK با کلید امضای debug ثابت برای بیلدهای شخصی RAZ امضا می‌شود.' \
+            'فینگرپرینت گواهی در فایل RAZ-signing-certificate-sha256.txt داخل بسته APK/Source artifact است.' \
+            'فایل debug.keystore به‌عنوان artifact جداگانه با نام RAZ-debug-signing-key-backup نگه‌داری می‌شود' \
+            'و workflow در اجرای بعدی ابتدا cache و سپس آخرین artifact خصوصی را برای بازیابی کلید بررسی می‌کند.' \
+            'این کلید و این APK مخصوص تست شخصی است؛ کلید debug را برای انتشار عمومی استفاده نکنید.' \
+            'برای انتشار عمومی باید کلید release جداگانه، نگهداری امن آن و تنظیم secrets انجام شود.' \
+            > "$overlay/SIGNING_NOTES_FA.txt"
 EOF
           (cd "$overlay" && zip -qr "$GITHUB_WORKSPACE/artifact/RAZ-source-overlay.zip" .)
 
