@@ -1,12 +1,12 @@
 # RAZ (راز) — Android messaging client
 
-**Status:** The initial ARM64 debug APK built successfully. The user verified account sign-in and message sending/receiving on a Redmi Note 9 Pro. An iOS-inspired dark visual refresh is now being rebuilt.
+**Status:** The initial ARM64 APK was verified on a Redmi Note 9 Pro, including account sign-in and message sending/receiving. The refreshed iOS-inspired dark UI is now being built as a dual-ABI APK for 32-bit ARMv7 and 64-bit ARM64.
 
 RAZ is an independent Android client based on the official [Telegram for Android source](https://github.com/DrKLO/Telegram). It is not an official Telegram product.
 
 - App name: **RAZ / راز**
 - Android application ID: `com.rm007.raz` (debug application ID: `com.rm007.raz.beta`)
-- Initial target device: Redmi Note 9 Pro (ARM64)
+- Tested device: Redmi Note 9 Pro (ARM64); 32-bit ABI is configured but still needs a physical 32-bit-device test
 - Upstream source is pinned in `.github/workflows/build-android.yml`
 
 ## Visual direction
@@ -24,9 +24,9 @@ The design takes inspiration from Apple's Liquid Glass guidance for navigation a
 1. Open the repository's **Actions** tab.
 2. Select **Build RAZ Android APK**.
 3. Press **Run workflow**.
-4. When the run succeeds, download the `RAZ-debug-arm64` artifact.
+4. When the run succeeds, download the `RAZ-debug-armv7-arm64` artifact. It is configured to contain both `armeabi-v7a` (32-bit ARM) and `arm64-v8a` (64-bit ARM).
 
-The normal workflow downloads the pinned Telegram Android source, applies RAZ branding, configures the build for ARM64, and creates a debug-signed test APK. It also caches a persistent RAZ debug signing key and keeps a separate private backup artifact to preserve update compatibility between test builds.
+The normal workflow downloads the pinned Telegram Android source, applies RAZ branding, configures both `armeabi-v7a` and `arm64-v8a`, and creates a debug-signed multi-ABI test APK. Each build pins the same upstream source and uses the same upstream test keystore, so update signatures are consistent across test builds.
 
 ## Telegram API credentials and public distribution
 
@@ -50,7 +50,7 @@ The APK artifact contains `RAZ-source-overlay.zip` with the important project cu
 
 ## Performance principles
 
-- Restrict native compilation to ARM64 for the initial target device.
+- Compile native libraries for 32-bit ARMv7 (`armeabi-v7a`) and 64-bit ARM64 (`arm64-v8a`) only; skip x86 ABIs to reduce build size.
 - Keep the glass/blur effect on the navigation layer rather than adding broad blur across scrolling message content.
 - Keep the official message/network implementation intact while improving theme, fonts, and branding.
 - Avoid aggressive shrinking or obfuscation until a release build can be tested against login, messaging, media, calls, notifications, and background behavior.

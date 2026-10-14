@@ -15,12 +15,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: raz-android-build-arm64-optimized
+  group: raz-android-build-universal
   cancel-in-progress: true
 
 jobs:
-  build-arm64:
-    name: Build debug APK (ARM64)
+  build-universal:
+    name: Build debug APK (ARMv7 + ARM64)
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     env:
@@ -74,7 +74,7 @@ jobs:
           RAZ_ALLOW_UPSTREAM_TEST_API: '1'
         run: python3 scripts/apply_branding.py upstream
 
-      - name: Restrict debug build to ARM64
+      - name: Configure debug build for ARMv7 + ARM64
         shell: bash
         run: |
           set -euo pipefail
@@ -84,7 +84,7 @@ jobs:
           app_path = Path("upstream/TMessagesProj_App/build.gradle")
           app_source = app_path.read_text()
           app_pattern = r'(?m)^([ \t]*afat[ \t]*\{[ \t]*\n[ \t]*ndk[ \t]*\{[ \t]*\n[ \t]*abiFilters[ \t]+)[^\n]+'
-          app_updated, app_count = re.subn(app_pattern, r'\1"arm64-v8a"', app_source, count=1)
+          app_updated, app_count = re.subn(app_pattern, r'\1"armeabi-v7a", "arm64-v8a"', app_source, count=1)
           if app_count != 1:
               raise SystemExit("Could not locate the app afat ABI filter; refusing an unsafe build edit")
           app_path.write_text(app_updated)
@@ -96,14 +96,14 @@ jobs:
               raise SystemExit("Could not locate the library defaultConfig SDK settings; refusing an unsafe build edit")
           library_updated = library_source.replace(
               library_anchor,
-              library_anchor + '\n        ndk {\n            abiFilters "arm64-v8a"\n        }\n',
+              library_anchor + '\n        ndk {\n            abiFilters "armeabi-v7a", "arm64-v8a"\n        }\n',
               1,
           )
           library_path.write_text(library_updated)
-          print("Configured both app and Telegram library native builds for arm64-v8a only")
+          print("Configured app and Telegram library native builds for armeabi-v7a and arm64-v8a")
           PY
 
-      - name: Build ARM64 debug APK
+      - name: Build multi-ABI debug APK (ARMv7 + ARM64)
         env:
           GRADLE_OPTS: -Xmx6g -XX:MaxMetaspaceSize=1g
         shell: bash
@@ -118,7 +118,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifact "$RUNNER_TEMP/raz-source-overlay"
-          cp upstream/TMessagesProj_App/build/outputs/apk/afat/debug/app.apk artifact/RAZ-debug-arm64.apk
+          cp upstream/TMessagesProj_App/build/outputs/apk/afat/debug/app.apk artifact/RAZ-debug-armv7-arm64.apk
           cp upstream-commit.txt artifact/
           keytool -list -v -keystore "upstream/TMessagesProj/config/release.keystore" -storepass android -alias androidkey \
             | awk '/SHA256:/ {print $0}' > artifact/RAZ-signing-certificate-sha256.txt
@@ -146,7 +146,7 @@ jobs:
       - name: Upload RAZ APK and source files
         uses: actions/upload-artifact@v4
         with:
-          name: RAZ-debug-arm64
+          name: RAZ-debug-armv7-arm64
           path: artifact/*
           if-no-files-found: error
           retention-days: 7

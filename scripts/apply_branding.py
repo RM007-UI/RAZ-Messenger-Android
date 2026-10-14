@@ -133,11 +133,11 @@ def main() -> int:
     )
     vars_path.write_text(text, encoding="utf-8")
 
-    # This first target is the intended ARM64 device; other ABIs are not built yet.
+    # Build the two Android ARM ABIs we target: 32-bit ARMv7 and 64-bit ARM64.
     text = app_gradle.read_text(encoding="utf-8")
     text, count = re.subn(
         r'abiFilters\s+"armeabi-v7a",\s*"arm64-v8a",\s*"x86",\s*"x86_64"',
-        'abiFilters "arm64-v8a"',
+        'abiFilters "armeabi-v7a", "arm64-v8a"',
         text,
     )
     if count < 1:
