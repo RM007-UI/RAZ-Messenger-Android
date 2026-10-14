@@ -281,7 +281,7 @@ def main() -> int:
     # Also make the conversation list breathe more like Telegram iOS instead of relying on colors alone.
     tabs_metrics_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java"
     tabs_metrics = tabs_metrics_path.read_text(encoding="utf-8")
-    old_tabs_metrics = "public static final int MAIN_TABS_HEIGHT = 64;\n    public static final int MAIN_TABS_MARGIN = 12;"
+    old_tabs_metrics = "public static final int MAIN_TABS_HEIGHT = 56;\\n    public static final int MAIN_TABS_MARGIN = 8;"
     new_tabs_metrics = "public static final int MAIN_TABS_HEIGHT = 64;\n    public static final int MAIN_TABS_MARGIN = 12;"
     if old_tabs_metrics in tabs_metrics:
         tabs_metrics = tabs_metrics.replace(old_tabs_metrics, new_tabs_metrics, 1)
@@ -342,6 +342,21 @@ def main() -> int:
         dialog_cell = dialog_cell.replace(old_avatar_radius, new_avatar_radius)
     elif new_avatar_radius not in dialog_cell:
         raise RuntimeError("Could not tune the chat-list avatar size")
+    dialog_cell_path.write_text(dialog_cell, encoding="utf-8")
+
+    # Match iOS chat-list hierarchy: keep contact names prominent and make previews quieter.
+    dialog_cell = dialog_cell_path.read_text(encoding="utf-8")
+    preview_size_patches = (
+        ("Theme.dialogs_messagePaint[0].setTextSize(dp(16));", "Theme.dialogs_messagePaint[0].setTextSize(dp(15));"),
+        ("Theme.dialogs_messagePrintingPaint[0].setTextSize(dp(16));", "Theme.dialogs_messagePrintingPaint[0].setTextSize(dp(15));"),
+        ("Theme.dialogs_messagePaint[1].setTextSize(dp(15));", "Theme.dialogs_messagePaint[1].setTextSize(dp(14));"),
+        ("Theme.dialogs_messagePrintingPaint[1].setTextSize(dp(15));", "Theme.dialogs_messagePrintingPaint[1].setTextSize(dp(14));"),
+    )
+    for old_size, new_size in preview_size_patches:
+        if old_size in dialog_cell:
+            dialog_cell = dialog_cell.replace(old_size, new_size)
+        elif new_size not in dialog_cell:
+            raise RuntimeError("Could not tune chat-list preview typography: " + old_size)
     dialog_cell_path.write_text(dialog_cell, encoding="utf-8")
 
     # The pinned upstream already includes a blur-backed glass tab bar. Tune its dark glass
