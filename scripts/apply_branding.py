@@ -464,7 +464,7 @@ def main() -> int:
         raise RuntimeError(f"Expected both standard message bubble radius paths; found {count}")
     bubble_path.write_text(bubble_source, encoding="utf-8")
 
-    # Give the input row an iOS-like pill surface with a subtle cool border.
+    # Give the input row a deeper translucent iOS-like pill surface and cool hairline border.
     # The existing send/attachment/emoji handlers and layout remain intact.
     compose_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java"
     compose_source = compose_path.read_text(encoding="utf-8")
@@ -476,9 +476,9 @@ def main() -> int:
         r'\1'
         '        android.graphics.drawable.GradientDrawable razComposeBackground = '
         'new android.graphics.drawable.GradientDrawable();\n'
-        '        razComposeBackground.setColor(Color.argb(200, 28, 32, 42));\n'
-        '        razComposeBackground.setCornerRadius(dp(23));\n'
-        '        razComposeBackground.setStroke(dp(1), Color.argb(86, 220, 230, 248));\n'
+        '        razComposeBackground.setColor(Color.argb(218, 22, 26, 35));\n'
+        '        razComposeBackground.setCornerRadius(dp(25));\n'
+        '        razComposeBackground.setStroke(dp(1), Color.argb(108, 154, 184, 230));\n'
         '        frameLayout.setBackground(razComposeBackground);\n'
         r'\2'
     )
