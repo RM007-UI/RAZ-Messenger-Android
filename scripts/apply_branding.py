@@ -281,8 +281,8 @@ def main() -> int:
     # Also make the conversation list breathe more like Telegram iOS instead of relying on colors alone.
     tabs_metrics_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java"
     tabs_metrics = tabs_metrics_path.read_text(encoding="utf-8")
-    old_tabs_metrics = "public static final int MAIN_TABS_HEIGHT = 56;\n    public static final int MAIN_TABS_MARGIN = 8;"
-    new_tabs_metrics = "public static final int MAIN_TABS_HEIGHT = 60;\n    public static final int MAIN_TABS_MARGIN = 10;"
+    old_tabs_metrics = "public static final int MAIN_TABS_HEIGHT = 64;\n    public static final int MAIN_TABS_MARGIN = 12;"
+    new_tabs_metrics = "public static final int MAIN_TABS_HEIGHT = 64;\n    public static final int MAIN_TABS_MARGIN = 12;"
     if old_tabs_metrics in tabs_metrics:
         tabs_metrics = tabs_metrics.replace(old_tabs_metrics, new_tabs_metrics, 1)
     elif new_tabs_metrics not in tabs_metrics:
@@ -291,8 +291,8 @@ def main() -> int:
 
     tabs_activity_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java"
     tabs_activity = tabs_activity_path.read_text(encoding="utf-8")
-    old_tab_max = "tabsView.setMaxWidth(dp(328 + DialogsActivity.MAIN_TABS_MARGIN * 2));"
-    new_tab_max = "tabsView.setMaxWidth(dp(352 + DialogsActivity.MAIN_TABS_MARGIN * 2));"
+    old_tab_max = "tabsView.setMaxWidth(dp(368 + DialogsActivity.MAIN_TABS_MARGIN * 2));"
+    new_tab_max = "tabsView.setMaxWidth(dp(368 + DialogsActivity.MAIN_TABS_MARGIN * 2));"
     if old_tab_max in tabs_activity:
         tabs_activity = tabs_activity.replace(old_tab_max, new_tab_max, 1)
     elif new_tab_max not in tabs_activity:
@@ -307,8 +307,8 @@ def main() -> int:
 
     tabs_layout_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/MainTabsLayout.java"
     tabs_layout = tabs_layout_path.read_text(encoding="utf-8")
-    old_selector_alpha = "selectorPaint.setColor(Theme.multAlpha(Theme.getColor(Theme.key_glass_tabSelected, resourcesProvider), 0.09f));"
-    new_selector_alpha = "selectorPaint.setColor(Theme.multAlpha(Theme.getColor(Theme.key_glass_tabSelected, resourcesProvider), 0.14f));"
+    old_selector_alpha = "selectorPaint.setColor(Theme.multAlpha(Theme.getColor(Theme.key_glass_tabSelected, resourcesProvider), 0.16f));"
+    new_selector_alpha = "selectorPaint.setColor(Theme.multAlpha(Theme.getColor(Theme.key_glass_tabSelected, resourcesProvider), 0.16f));"
     if old_selector_alpha in tabs_layout:
         tabs_layout = tabs_layout.replace(old_selector_alpha, new_selector_alpha, 1)
     elif new_selector_alpha not in tabs_layout:
@@ -328,15 +328,15 @@ def main() -> int:
     dialog_cell_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java"
     dialog_cell = dialog_cell_path.read_text(encoding="utf-8")
     for old_height, new_height, label in (
-        ("public int heightDefault = 70;", "public int heightDefault = 74;", "default chat-row height"),
-        ("public int heightThreeLines = 76;", "public int heightThreeLines = 80;", "three-line chat-row height"),
+        ("public int heightDefault = 70;", "public int heightDefault = 76;", "default chat-row height"),
+        ("public int heightThreeLines = 76;", "public int heightThreeLines = 82;", "three-line chat-row height"),
     ):
         if old_height in dialog_cell:
             dialog_cell = dialog_cell.replace(old_height, new_height, 1)
         elif new_height not in dialog_cell:
             raise RuntimeError("Could not tune " + label)
-    old_avatar_radius = "avatarImage.setRoundRadius(dp(26));"
-    new_avatar_radius = "avatarImage.setRoundRadius(dp(27));"
+    old_avatar_radius = "avatarImage.setRoundRadius(dp(28));"
+    new_avatar_radius = "avatarImage.setRoundRadius(dp(28));"
     avatar_count = dialog_cell.count(old_avatar_radius)
     if avatar_count:
         dialog_cell = dialog_cell.replace(old_avatar_radius, new_avatar_radius)
