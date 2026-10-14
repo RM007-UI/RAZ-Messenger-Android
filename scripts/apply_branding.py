@@ -281,7 +281,7 @@ def main() -> int:
     # Also make the conversation list breathe more like Telegram iOS instead of relying on colors alone.
     tabs_metrics_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java"
     tabs_metrics = tabs_metrics_path.read_text(encoding="utf-8")
-    old_tabs_metrics = "public static final int MAIN_TABS_HEIGHT = 56;\\n    public static final int MAIN_TABS_MARGIN = 8;"
+    old_tabs_metrics = "public static final int MAIN_TABS_HEIGHT = 56;\n    public static final int MAIN_TABS_MARGIN = 8;"
     new_tabs_metrics = "public static final int MAIN_TABS_HEIGHT = 64;\n    public static final int MAIN_TABS_MARGIN = 12;"
     if old_tabs_metrics in tabs_metrics:
         tabs_metrics = tabs_metrics.replace(old_tabs_metrics, new_tabs_metrics, 1)
