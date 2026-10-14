@@ -51,9 +51,17 @@ The APK artifact contains `RAZ-source-overlay.zip` with the important project cu
 
 ## Translation and proxy compatibility
 
-RAZ reuses Telegram's native per-message translation UI (`TranslateAlert2`) and `messages.translateText` API from the pinned source. The Show Translate Button preference defaults to enabled on fresh installs, so users can translate message text in-place via Telegram's own message-translation action; there is no separate free-text translator field. Existing explicit user choices are preserved. The whole-chat live translation preference and Premium entitlement checks remain upstream-owned and are not bypassed.
+RAZ translation requirements and acceptance checks:
 
-The current proxy editor retains the upstream Telegram-supported proxy types (SOCKS5, MTProto, and Telegram web proxy). Other tunnel/profile formats are not implemented in this build, so the UI does not claim they connect.
+- **Translate a received message:** use Telegram's native message context-menu action (`TranslateAlert2`) and `messages.translateText`; the target is the selected received message, not text typed into a separate input field.
+- **Translate entire chat:** use Telegram's native chat translation panel and automatic-translation controller. On fresh installs the per-message Translate action defaults to enabled; existing user preferences are preserved.
+- **Show original:** retain Telegram's native original/translated message behavior.
+- **Premium behavior:** keep Telegram's own entitlement checks and live-translation rules intact. Do not fake Premium status or bypass server-side access restrictions.
+- **Privacy:** translation requests follow Telegram's documented translation path; users should be aware that translated message text may be processed by Telegram and its translation providers.
+
+The proxy editor currently supports the upstream Telegram proxy types (SOCKS5, MTProto, and Telegram web proxy). VLESS, VMess, Trojan, Shadowsocks, and Hysteria are **not yet implemented as working tunnel protocols**. They must not be presented as connectable until a compatible, maintained engine is integrated and each URI format, connection lifecycle, and failure case is tested.
+
+Visual acceptance is separate from translation behavior: compare the chat list, chat header, message bubbles, composer, menus, and bottom navigation against current Telegram iOS references; do not consider a palette-only change a completed iOS-style redesign.
 
 ## Performance principles
 
