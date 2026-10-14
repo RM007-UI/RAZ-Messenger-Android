@@ -182,7 +182,6 @@ jobs:
             'این کلید و این APK مخصوص تست شخصی است؛ کلید debug را برای انتشار عمومی استفاده نکنید.' \
             'برای انتشار عمومی باید کلید release جداگانه، نگهداری امن آن و تنظیم secrets انجام شود.' \
             > "$overlay/SIGNING_NOTES_FA.txt"
-EOF
           (cd "$overlay" && zip -qr "$GITHUB_WORKSPACE/artifact/RAZ-source-overlay.zip" .)
 
       - name: Upload RAZ APK and source files
