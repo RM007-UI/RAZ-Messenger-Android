@@ -1,53 +1,52 @@
-# RAZ (راز) — Android client based on Telegram
+# RAZ (راز) — Android messaging client
 
-**Project status: starter scaffold. No APK has been built yet.**
+**Status:** The initial ARM64 debug APK built successfully. The user verified account sign-in and message sending/receiving on a Redmi Note 9 Pro. An iOS-inspired dark visual refresh is now being rebuilt.
 
-RAZ is an independent Android client built by customizing the official [Telegram for Android](https://github.com/DrKLO/Telegram) source at build time. This repository contains our branding overlay and build workflow; the large upstream source is fetched by GitHub Actions.
+RAZ is an independent Android client based on the official [Telegram for Android source](https://github.com/DrKLO/Telegram). It is not an official Telegram product.
 
 - App name: **RAZ / راز**
-- Android application ID: `com.rm007.raz` (debug app ID: `com.rm007.raz.beta`)
-- Intended initial device: Redmi Note 9 Pro (ARM64)
-- Build workflow: `.github/workflows/build-android.yml`
+- Android application ID: `com.rm007.raz` (debug application ID: `com.rm007.raz.beta`)
+- Initial target device: Redmi Note 9 Pro (ARM64)
+- Upstream source is pinned in `.github/workflows/build-android.yml`
 
-## Build a test APK now
+## Visual direction
 
-You can try the build before Telegram approves your own API credentials:
+- Deep graphite/black surfaces, cool silver highlights, and an iOS-inspired blue accent.
+- The pinned Telegram source already contains a blur-backed glass navigation bar. RAZ tunes the glass tab palette instead of applying expensive blur to the entire message content.
+- Inter is used for the Latin interface; Noto Sans Arabic is the preferred Arabic-script fallback on Android 10+ for Persian readability. Both fonts are bundled under the SIL Open Font License; their license texts are included in the APK assets and the source tree's third-party notices.
+- A custom geometric dark launcher icon replaces Telegram's standard paper-plane branding.
+- The first-run theme defaults to dark without overriding a theme the user has already selected.
+
+The design takes inspiration from Apple's Liquid Glass guidance for navigation and controls, but RAZ uses Android-native rendering and its own assets. Apple's San Francisco font files are not bundled.
+
+## Build a test APK
 
 1. Open the repository's **Actions** tab.
 2. Select **Build RAZ Android APK**.
-3. Press **Run workflow** and confirm **Run workflow**.
-4. When the run succeeds, open it and download the `RAZ-debug-arm64` artifact. It contains `RAZ-debug-arm64.apk` and the upstream commit record.
+3. Press **Run workflow**.
+4. When the run succeeds, download the `RAZ-debug-arm64` artifact.
 
-If `TG_API_ID` and `TG_API_HASH` are both absent, the workflow preserves the sample API credentials supplied in the pinned upstream source. Telegram documents those credentials as suitable for testing only. This test build may install and launch, but **login and real Telegram connectivity are not guaranteed**. Do not distribute it or use those sample credentials for a public app.
+The normal workflow downloads the pinned Telegram Android source, applies RAZ branding, configures the build for ARM64, and creates a debug-signed test APK.
 
-## Configure your own Telegram API credentials
+## Telegram API credentials and public distribution
 
-For a functional client, obtain your own API credentials from [my.telegram.org](https://my.telegram.org). If the site keeps showing only `ERROR`, the build-only test path above can proceed while the registration issue is investigated.
+The initial test build used the sample API credentials in the pinned upstream source; sign-in and messaging worked in the user's device test. That does not make sample credentials appropriate for distributing an app. Before a public release:
 
-In this repository, open **Settings → Secrets and variables → Actions** and add:
+1. Obtain and use RAZ's own `TG_API_ID` and `TG_API_HASH` from [my.telegram.org](https://my.telegram.org).
+2. Keep credentials in GitHub Actions secrets, never in source control.
+3. Configure RAZ's own Firebase services if push notifications are required.
+4. Set up a stable release-signing key, release versioning, privacy policy, and a tested update process.
+5. Follow Telegram's branding requirements and comply with the upstream GPL-2.0-or-later license, including providing the corresponding modified source and required notices.
 
-- `TG_API_ID`: your numeric API ID
-- `TG_API_HASH`: your API hash (32 hexadecimal characters)
+The workflow still permits a test-only build with upstream sample credentials when both secrets are absent. Do not distribute that test build publicly.
 
-Keep API credentials in GitHub Actions secrets; never commit them to this repository. Once both secrets exist, the workflow automatically uses them instead of the upstream test credentials.
+## Performance principles
 
-## What the current build does
+- Restrict native compilation to ARM64 for the initial target device.
+- Keep the glass/blur effect on the navigation layer rather than adding broad blur across scrolling message content.
+- Keep the official message/network implementation intact while improving theme, fonts, and branding.
+- Avoid aggressive shrinking or obfuscation until a release build can be tested against login, messaging, media, calls, notifications, and background behavior.
 
-- Applies RAZ's launcher icon, display name and Android package ID.
-- Uses your API credentials if supplied, otherwise keeps the pinned upstream sample credentials for test builds only.
-- Limits native compilation to ARM64 to reduce unnecessary build work.
-- Produces a debug-signed test APK from the official Telegram Android Gradle task.
+## Licensing
 
-The workflow pins the official Telegram source to commit [`f32ffeec763f0bdbf4bec25b52d654f77bff733d`](https://github.com/DrKLO/Telegram/commit/f32ffeec763f0bdbf4bec25b52d654f77bff733d), verified against upstream on 13 October 2026. This makes the first build reproducible; the exact commit is also saved in the artifact as `upstream-commit.txt`.
-
-## Known limitations
-
-- **No real GitHub Actions build has been run yet**, and the APK has not been installed or tested on a phone.
-- Sample API credentials are for testing only and may be restricted by Telegram; this build is not a finished or reliable messaging client.
-- Push notifications and other Google services still require RAZ's own Firebase / service configuration. Changing the package ID alone does not configure working push notifications.
-- The APK is a test build, not a public release. Before distributing it, establish a release signing key, stable versioning, service configuration and a privacy policy.
-- RAZ is an unofficial, independent client and must not be represented as an official Telegram product.
-
-## License
-
-The upstream Telegram for Android source is licensed under GPL-2.0-or-later. RAZ customization files are also provided under GPL-2.0-or-later. When distributing a modified client, comply with the upstream license and provide the corresponding source and required notices. See the upstream project: https://github.com/DrKLO/Telegram
+Telegram's Android source is licensed under GPL-2.0-or-later. RAZ's customization files are intended to remain compatible with that license. See [the official source repository](https://github.com/DrKLO/Telegram) and `THIRD_PARTY_NOTICES.md`.

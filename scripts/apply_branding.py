@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import sys
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -177,6 +178,267 @@ def main() -> int:
             firebase_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         except (ValueError, TypeError) as exc:
             raise RuntimeError(f"Could not safely update {firebase_path.relative_to(upstream)}: {exc}") from exc
+
+    # RAZ visual refresh: iOS-inspired dark materials, pinned fonts, and Arabic fallback.
+    font_commit = "66928797f271fed5ee428544e7229685e2d90127"
+    font_resource_dir = upstream / "TMessagesProj/src/main/res/font"
+    font_resource_dir.mkdir(parents=True, exist_ok=True)
+    font_sources = (
+        (
+            "Inter variable font",
+            f"https://raw.githubusercontent.com/google/fonts/{font_commit}/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf",
+            font_resource_dir / "raz_inter.ttf",
+        ),
+        (
+            "Noto Sans Arabic variable font",
+            f"https://raw.githubusercontent.com/google/fonts/{font_commit}/ofl/notosansarabic/NotoSansArabic%5Bwdth%2Cwght%5D.ttf",
+            font_resource_dir / "raz_noto_arabic.ttf",
+        ),
+    )
+    for font_label, font_url, font_path in font_sources:
+        try:
+            with urllib.request.urlopen(font_url, timeout=120) as response:
+                font_bytes = response.read()
+        except Exception as exc:
+            raise RuntimeError(f"Could not download pinned {font_label}") from exc
+        if len(font_bytes) < 100_000 or font_bytes[:4] not in (b"\x00\x01\x00\x00", b"OTTO"):
+            raise RuntimeError(f"Downloaded {font_label} did not look like a valid TrueType/OpenType font")
+        font_path.write_bytes(font_bytes)
+
+    font_license_dir = upstream / "TMessagesProj/src/main/assets"
+    font_license_dir.mkdir(parents=True, exist_ok=True)
+    for license_name, license_url in (
+        (
+            "RAZ-Inter-OFL.txt",
+            f"https://raw.githubusercontent.com/google/fonts/{font_commit}/ofl/inter/OFL.txt",
+        ),
+        (
+            "RAZ-Noto-Sans-Arabic-OFL.txt",
+            f"https://raw.githubusercontent.com/google/fonts/{font_commit}/ofl/notosansarabic/OFL.txt",
+        ),
+    ):
+        try:
+            with urllib.request.urlopen(license_url, timeout=60) as response:
+                license_text = response.read().decode("utf-8")
+        except Exception as exc:
+            raise RuntimeError(f"Could not download font license {license_name}") from exc
+        if "SIL OPEN FONT LICENSE Version 1.1" not in license_text:
+            raise RuntimeError(f"Unexpected license content for {license_name}")
+        (font_license_dir / license_name).write_text(license_text, encoding="utf-8")
+
+    # Set the font for standard Android widgets while retaining Android's own fallback for
+    # glyphs not covered by Inter. Canvas-based text will use Inter with Noto Sans Arabic fallback.
+    styles_path = upstream / "TMessagesProj/src/main/res/values/styles.xml"
+    styles = styles_path.read_text(encoding="utf-8")
+    styles, count = re.subn(
+        r'(<style name="MyTextViewStyle"[^>]*>\s*)',
+        r'\1        <item name="android:fontFamily">@font/raz_inter</item>\n',
+        styles,
+        count=1,
+    )
+    if count != 1:
+        raise RuntimeError("Could not attach Inter to MyTextViewStyle")
+    styles, count = re.subn(
+        r'(<style name="EditTextNoBackgroundStyle"[^>]*>\s*)',
+        r'\1        <item name="android:fontFamily">@font/raz_inter</item>\n',
+        styles,
+        count=1,
+    )
+    if count != 1:
+        raise RuntimeError("Could not attach Inter to EditTextNoBackgroundStyle")
+
+    # Avoid a white flash during launch; keep the initial surface consistent with RAZ dark mode.
+    for style_name in ("Theme.TMessages.Start", "Theme.TMessages"):
+        for item_name in ("android:colorBackground", "android:windowBackground"):
+            pattern = (
+                r'(<style name="' + re.escape(style_name) + r'".*?<item name="' +
+                re.escape(item_name) + r'">)@android:color/white(</item>)'
+            )
+            styles, count = re.subn(pattern, r'\1#FF0B0D12\2', styles, count=1, flags=re.S)
+            if count != 1:
+                raise RuntimeError(f"Could not set dark launch surface {style_name}/{item_name}")
+    styles_path.write_text(styles, encoding="utf-8")
+
+    # Default to Telegram's existing dark theme only when the user has not chosen a theme.
+    theme_java_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java"
+    theme_java = theme_java_path.read_text(encoding="utf-8")
+    theme_java = one(
+        r'String theme = preferences\.getString\("theme", null\);',
+        'String theme = preferences.getString("theme", "Dark");',
+        theme_java,
+        "RAZ first-run dark theme default",
+    )
+    theme_java_path.write_text(theme_java, encoding="utf-8")
+
+    # The pinned upstream already includes a blur-backed glass tab bar. Tune its dark glass
+    # palette rather than adding costly blur layers throughout the message content.
+    def signed_argb(color_hex: str) -> str:
+        value = int(color_hex, 16)
+        if value >= 0x80000000:
+            value -= 0x100000000
+        return str(value)
+
+    palette = {
+        "windowBackgroundWhite": "FF0B0D12",
+        "windowBackgroundGray": "FF07080C",
+        "windowBackgroundChecked": "FF1B1E26",
+        "actionBarDefault": "FF10131A",
+        "actionBarDefaultTitle": "FFF5F7FC",
+        "actionBarDefaultIcon": "FFF5F7FC",
+        "actionBarDefaultSearch": "FFE8ECF5",
+        "actionBarDefaultSubtitle": "FFA0A7B4",
+        "actionBarDefaultSubmenuBackground": "FF1B1E26",
+        "windowBackgroundWhiteBlackText": "FFF1F3F8",
+        "windowBackgroundWhiteGrayText": "FFA1A8B5",
+        "windowBackgroundWhiteGrayText2": "FF9098A7",
+        "windowBackgroundWhiteGrayText3": "FF7D8594",
+        "windowBackgroundWhiteGrayIcon": "FF858D9B",
+        "windowBackgroundWhiteBlueText": "FF0A84FF",
+        "windowBackgroundWhiteLinkText": "FF64A9FF",
+        "dialogTextBlue": "FF0A84FF",
+        "dialogBackground": "FF191C24",
+        "dialogBackgroundGray": "FF252832",
+        "divider": "FF292D36",
+        "chats_name": "FFF1F3F8",
+        "chats_nameMessage": "FFA1A8B5",
+        "chats_nameMessage_threeLines": "FFA1A8B5",
+        "chats_unreadCounter": "FF0A84FF",
+        "chats_actionBackground": "FF222630",
+        "chat_inBubble": "FF252934",
+        "chat_inBubbleSelected": "FF303745",
+        "chat_outBubble": "FF0A84FF",
+        "chat_messageTextIn": "FFF1F3F8",
+        "chat_messageTextOut": "FFFFFFFF",
+        "chat_messagePanelBackground": "FF171A21",
+        "chat_messagePanelHint": "FF8F97A6",
+        "chat_messagePanelVoiceBackground": "FF20242D",
+        "chat_topPanelLine": "FF2B303A",
+        "glass_defaultIcon": "DFF5F7FC",
+        "glass_defaultText": "DFF5F7FC",
+        "glass_targetMainTabs": "B81A1D25",
+        "glass_targetMainTopPanel": "B8181B22",
+    }
+    for theme_asset in (
+        upstream / "TMessagesProj/src/main/assets/darkblue.attheme",
+        upstream / "TMessagesProj/src/main/assets/night.attheme",
+    ):
+        if not theme_asset.is_file():
+            raise RuntimeError(f"Missing dark theme asset: {theme_asset.name}")
+        source_lines = theme_asset.read_text(encoding="utf-8").splitlines()
+        seen = set()
+        result_lines = []
+        for line in source_lines:
+            if "=" in line:
+                key = line.split("=", 1)[0]
+                if key in palette:
+                    line = key + "=" + signed_argb(palette[key])
+                    seen.add(key)
+            result_lines.append(line)
+        required_colors = {"windowBackgroundWhite", "actionBarDefault", "actionBarDefaultTitle", "windowBackgroundWhiteBlackText"}
+        missing_colors = sorted(required_colors - seen)
+        if missing_colors:
+            raise RuntimeError(f"{theme_asset.name} is missing expected color keys: {', '.join(missing_colors)}")
+        theme_asset.write_text("\n".join(result_lines) + "\n", encoding="utf-8")
+
+    # Build a composite typeface on Android 10+ so Latin uses Inter and Arabic-script text
+    # (including Persian) prefers Noto Sans Arabic; older Android releases fall back safely.
+    utilities_path = upstream / "TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java"
+    utilities = utilities_path.read_text(encoding="utf-8")
+    if "import android.graphics.fonts.Font;" not in utilities:
+        utilities = utilities.replace(
+            "import android.graphics.Typeface;\n",
+            "import android.graphics.Typeface;\nimport android.graphics.fonts.Font;\nimport android.graphics.fonts.FontFamily;\n",
+            1,
+        )
+    if "private static Typeface razTypeface;" not in utilities:
+        utilities = utilities.replace(
+            "public static Typeface mediumTypeface;\n",
+            "public static Typeface mediumTypeface;\n    private static Typeface razTypeface;\n",
+            1,
+        )
+    helper = r'''
+    private static Typeface getRazTypeface() {
+        if (razTypeface != null) {
+            return razTypeface;
+        }
+        synchronized (AndroidUtilities.class) {
+            if (razTypeface == null) {
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        Font latinFont = new Font.Builder(ApplicationLoader.applicationContext.getResources(), R.font.raz_inter)
+                                .setWeight(400)
+                                .build();
+                        Font arabicFont = new Font.Builder(ApplicationLoader.applicationContext.getResources(), R.font.raz_noto_arabic)
+                                .setWeight(400)
+                                .build();
+                        FontFamily latinFamily = new FontFamily.Builder(latinFont).build();
+                        FontFamily arabicFamily = new FontFamily.Builder(arabicFont).build();
+                        razTypeface = new Typeface.CustomFallbackBuilder(latinFamily)
+                                .addCustomFallback(arabicFamily)
+                                .setSystemFallback("sans-serif")
+                                .build();
+                    } else {
+                        razTypeface = Typeface.create("sans-serif", Typeface.NORMAL);
+                    }
+                } catch (Throwable error) {
+                    FileLog.e(error);
+                    razTypeface = Typeface.create("sans-serif", Typeface.NORMAL);
+                }
+            }
+        }
+        return razTypeface;
+    }
+
+'''
+    if "private static Typeface getRazTypeface()" not in utilities:
+        utilities, count = re.subn(
+            r'(?m)^    public static Typeface bold\(\) \{',
+            helper + '    public static Typeface bold() {',
+            utilities,
+            count=1,
+        )
+        if count != 1:
+            raise RuntimeError("Could not add RAZ composite typeface helper")
+
+    old_bold = r'''    public static Typeface bold() {
+        if (mediumTypeface == null) {
+            if (SharedConfig.useSystemBoldFont && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                mediumTypeface = Typeface.create(null, 500, false);
+            } else {
+                mediumTypeface = getTypeface(TYPEFACE_ROBOTO_MEDIUM);
+            }
+        }
+        return mediumTypeface;
+    }'''
+    new_bold = r'''    public static Typeface bold() {
+        if (mediumTypeface == null) {
+            if (SharedConfig.useSystemBoldFont && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                mediumTypeface = Typeface.create(getRazTypeface(), 500, false);
+            } else {
+                mediumTypeface = Typeface.create(getRazTypeface(), Typeface.BOLD);
+            }
+        }
+        return mediumTypeface;
+    }'''
+    if old_bold in utilities:
+        utilities = utilities.replace(old_bold, new_bold, 1)
+    elif new_bold not in utilities:
+        raise RuntimeError("Could not switch canvas bold text to the RAZ font family")
+
+    get_typeface_anchor = "public static Typeface getTypeface(String assetPath) {\n        synchronized (typefaceCache) {"
+    get_typeface_replacement = """public static Typeface getTypeface(String assetPath) {
+        synchronized (typefaceCache) {
+            if (TYPEFACE_ROBOTO_MEDIUM.equals(assetPath)) {
+                if (!typefaceCache.containsKey(assetPath)) {
+                    typefaceCache.put(assetPath, Typeface.create(getRazTypeface(), Typeface.BOLD));
+                }
+                return typefaceCache.get(assetPath);
+            }"""
+    if get_typeface_anchor in utilities:
+        utilities = utilities.replace(get_typeface_anchor, get_typeface_replacement, 1)
+    elif get_typeface_replacement not in utilities:
+        raise RuntimeError("Could not redirect Telegram's shared medium typeface to RAZ fonts")
+    utilities_path.write_text(utilities, encoding="utf-8")
 
     icon_src = ROOT / "assets/icons/raz_launcher.xml"
     icon_dst = upstream / "TMessagesProj/src/main/res/drawable/raz_launcher.xml"
