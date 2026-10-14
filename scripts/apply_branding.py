@@ -555,6 +555,28 @@ def main() -> int:
         raise RuntimeError("Could not locate Telegram TranslateButton color styling")
     translate_button_path.write_text(translate_button, encoding="utf-8")
 
+    # Refine the conversation identity header toward Telegram iOS: a distinct, compact
+    # profile image followed by a clear title/status stack. Keep native click targets intact.
+    chat_avatar_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAvatarContainer.java"
+    chat_avatar = chat_avatar_path.read_text(encoding="utf-8")
+    header_patches = (
+        ("private int avatarSizeInDp = 42;", "private int avatarSizeInDp = 38;", "chat header avatar size"),
+        ("private int leftPadding = dp(8);", "private int leftPadding = dp(6);", "chat header leading inset"),
+        ("avatarImageView.setRoundRadius(dp(21));", "avatarImageView.setRoundRadius(dp(18));", "chat header avatar radius"),
+        ("titleTextView.setTextSize(18);", "titleTextView.setTextSize(17.5f);", "chat header title size"),
+        ("titleTextView.setPadding(0, dp(6), 0, dp(12));", "titleTextView.setPadding(0, dp(3), 0, dp(8));", "chat header title spacing"),
+        ("animatedSubtitleTextView.setTextSize(dp(14));", "animatedSubtitleTextView.setTextSize(dp(13));", "animated chat status size"),
+        ("subtitleTextView.setTextSize(14);", "subtitleTextView.setTextSize(13);", "chat status size"),
+        ("dp(glassMode ? 49.66f : 55)", "dp(glassMode ? 45.5f : 51)", "chat header avatar-to-title spacing"),
+        ("dp(glassMode ? 23.66f : 24)", "dp(glassMode ? 22.5f : 23)", "chat header status baseline"),
+    )
+    for old_value, new_value, label in header_patches:
+        if old_value in chat_avatar:
+            chat_avatar = chat_avatar.replace(old_value, new_value, 1)
+        elif new_value not in chat_avatar:
+            raise RuntimeError("Could not tune " + label)
+    chat_avatar_path.write_text(chat_avatar, encoding="utf-8")
+
     # Build a composite typeface on Android 10+ so Latin uses Inter and Arabic-script text
     # (including Persian) prefers Noto Sans Arabic; older Android releases fall back safely.
     utilities_path = upstream / "TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java"
