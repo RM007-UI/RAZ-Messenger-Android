@@ -563,7 +563,7 @@ def main() -> int:
         ("private int avatarSizeInDp = 42;", "private int avatarSizeInDp = 38;", "chat header avatar size"),
         ("private int leftPadding = dp(8);", "private int leftPadding = dp(6);", "chat header leading inset"),
         ("avatarImageView.setRoundRadius(dp(21));", "avatarImageView.setRoundRadius(dp(18));", "chat header avatar radius"),
-        ("titleTextView.setTextSize(18);", "titleTextView.setTextSize(17.5f);", "chat header title size"),
+        ("titleTextView.setTextSize(18);", "titleTextView.setTextSize(17);", "chat header title size"),
         ("titleTextView.setPadding(0, dp(6), 0, dp(12));", "titleTextView.setPadding(0, dp(3), 0, dp(8));", "chat header title spacing"),
         ("animatedSubtitleTextView.setTextSize(dp(14));", "animatedSubtitleTextView.setTextSize(dp(13));", "animated chat status size"),
         ("subtitleTextView.setTextSize(14);", "subtitleTextView.setTextSize(13);", "chat status size"),
