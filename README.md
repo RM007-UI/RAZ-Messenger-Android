@@ -26,7 +26,7 @@ The design takes inspiration from Apple's Liquid Glass guidance for navigation a
 3. Press **Run workflow**.
 4. When the run succeeds, download the `RAZ-debug-arm64` artifact.
 
-The normal workflow downloads the pinned Telegram Android source, applies RAZ branding, configures the build for ARM64, and creates a debug-signed test APK.
+The normal workflow downloads the pinned Telegram Android source, applies RAZ branding, configures the build for ARM64, and creates a debug-signed test APK. It also caches a persistent RAZ debug signing key and keeps a separate private backup artifact to preserve update compatibility between test builds.
 
 ## Telegram API credentials and public distribution
 
@@ -39,6 +39,12 @@ The initial test build used the sample API credentials in the pinned upstream so
 5. Follow Telegram's branding requirements and comply with the upstream GPL-2.0-or-later license, including providing the corresponding modified source and required notices.
 
 The workflow still permits a test-only build with upstream sample credentials when both secrets are absent. Do not distribute that test build publicly.
+
+## Stable signing for test builds
+
+The first build that contains persistent signing may use a newly generated debug key. The original test APK did not include its signing keystore, so Android may require a one-time uninstall/reinstall to move to this stable signing identity. After that migration, subsequent builds are signed with the same debug key using the GitHub Actions cache and a private `RAZ-debug-signing-key-backup` artifact. Keep that artifact private. This is a debug/test signing setup, not a public-release signing key; use a separate release keystore stored in GitHub Actions secrets before public distribution.
+
+The APK artifact also contains `RAZ-source-overlay.zip` with the important project customization files and `RAZ-signing-certificate-sha256.txt` for comparing the signer across builds.
 
 ## Performance principles
 

@@ -303,6 +303,9 @@ def main() -> int:
         "chats_nameMessage": "FFA1A8B5",
         "chats_nameMessage_threeLines": "FFA1A8B5",
         "chats_unreadCounter": "FF0A84FF",
+        "telegram_color": "FF0A84FF",
+        "chat_outBubbleSelected": "FF0769D8",
+        "chat_inBubbleSelected": "FF303746",
         "chats_actionBackground": "FF222630",
         "chat_inBubble": "FF252934",
         "chat_inBubbleSelected": "FF303745",
@@ -334,11 +337,62 @@ def main() -> int:
                     line = key + "=" + signed_argb(palette[key])
                     seen.add(key)
             result_lines.append(line)
+        for palette_key, palette_value in palette.items():
+            if palette_key not in seen:
+                result_lines.append(palette_key + "=" + signed_argb(palette_value))
         required_colors = {"windowBackgroundWhite", "actionBarDefault", "actionBarDefaultTitle", "windowBackgroundWhiteBlackText"}
         missing_colors = sorted(required_colors - seen)
         if missing_colors:
             raise RuntimeError(f"{theme_asset.name} is missing expected color keys: {', '.join(missing_colors)}")
         theme_asset.write_text("\n".join(result_lines) + "\n", encoding="utf-8")
+
+    # iMessage-inspired message shapes: fuller capsule corners, keeping grouped-message joins.
+    bubble_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/ActionBar/MessageDrawable.java"
+    bubble_source = bubble_path.read_text(encoding="utf-8")
+    bubble_source, count = re.subn(
+        r'newRad = dp\(SharedConfig\.bubbleRadius\);',
+        'newRad = dp(Math.max(20, SharedConfig.bubbleRadius));',
+        bubble_source,
+        count=1,
+    )
+    if count != 1:
+        raise RuntimeError("Could not locate the cached message bubble radius")
+    radius_pattern = (
+        r'(?m)^([ \t]*)rad = dp\(SharedConfig\.bubbleRadius\);\n'
+        r'\1nearRad = dp\(Math\.min\(6, SharedConfig\.bubbleRadius\)\);'
+    )
+    bubble_source, count = re.subn(
+        radius_pattern,
+        lambda match: match.group(1) + 'rad = dp(Math.max(20, SharedConfig.bubbleRadius));\n'
+            + match.group(1) + 'nearRad = dp(12);',
+        bubble_source,
+    )
+    if count < 2:
+        raise RuntimeError(f"Expected both standard message bubble radius paths; found {count}")
+    bubble_path.write_text(bubble_source, encoding="utf-8")
+
+    # Give the input row an iOS-like pill surface with a subtle cool border.
+    # The existing send/attachment/emoji handlers and layout remain intact.
+    compose_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java"
+    compose_source = compose_path.read_text(encoding="utf-8")
+    compose_anchor = (
+        r'(        frameLayout\.setClipChildren\(false\);\n)'
+        r'(        textFieldContainer\.addView\(frameLayout, LayoutHelper\.createFrame\(LayoutHelper\.MATCH_PARENT)'
+    )
+    compose_replacement = (
+        r'\1'
+        '        android.graphics.drawable.GradientDrawable razComposeBackground = '
+        'new android.graphics.drawable.GradientDrawable();\n'
+        '        razComposeBackground.setColor(Color.argb(236, 28, 32, 42));\n'
+        '        razComposeBackground.setCornerRadius(dp(23));\n'
+        '        razComposeBackground.setStroke(dp(1), Color.argb(42, 220, 230, 248));\n'
+        '        frameLayout.setBackground(razComposeBackground);\n'
+        r'\2'
+    )
+    compose_source, count = re.subn(compose_anchor, compose_replacement, compose_source, count=1)
+    if count != 1:
+        raise RuntimeError("Could not attach the RAZ pill-style compose background")
+    compose_path.write_text(compose_source, encoding="utf-8")
 
     # Build a composite typeface on Android 10+ so Latin uses Inter and Arabic-script text
     # (including Persian) prefers Noto Sans Arabic; older Android releases fall back safely.
