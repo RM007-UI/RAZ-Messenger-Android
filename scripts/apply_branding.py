@@ -262,19 +262,17 @@ def main() -> int:
     # Default to Telegram's existing dark theme only when the user has not chosen a theme.
     theme_java_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java"
     theme_java = theme_java_path.read_text(encoding="utf-8")
-    old_theme_lookup = r'String theme = preferences\\.getString\\("theme", null\\);'
-    new_theme_lookup = r'''
-            if (!preferences.getBoolean("raz_ios_style_v2_migrated", false)) {
+    old_theme_lookup = '            String theme = preferences.getString("theme", null);'
+    new_theme_lookup = '''            if (!preferences.getBoolean("raz_ios_style_v2_migrated", false)) {
                 preferences.edit()
                         .putString("theme", "Dark")
                         .putString("nighttheme", "Dark")
                         .putBoolean("raz_ios_style_v2_migrated", true)
                         .apply();
             }
-            String theme = preferences.getString("theme", "Dark");
-'''
+            String theme = preferences.getString("theme", "Dark");'''
     if old_theme_lookup in theme_java:
-        theme_java = theme_java.replace(old_theme_lookup, new_theme_lookup.strip("\\n"), 1)
+        theme_java = theme_java.replace(old_theme_lookup, new_theme_lookup, 1)
     elif 'raz_ios_style_v2_migrated' not in theme_java:
         raise RuntimeError("Could not migrate existing installs to the RAZ dark theme")
     theme_java_path.write_text(theme_java, encoding="utf-8")
