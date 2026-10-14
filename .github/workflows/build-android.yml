@@ -50,6 +50,32 @@ jobs:
             exit 1
           fi
 
+      - name: Free disk space for dual-ABI native build
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Disk space before cleanup:"
+          df -h /
+          # GitHub's Ubuntu image includes large toolchains irrelevant to an Android-only build.
+          # Keep Java, Android command-line tools, required SDK platforms, NDK, and CMake.
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/powershell /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/share/chromium /usr/share/swift
+          if [[ -d "$ANDROID_SDK_ROOT/system-images" ]]; then
+            sudo rm -rf "$ANDROID_SDK_ROOT/system-images"
+          fi
+          if [[ -d "$ANDROID_SDK_ROOT/emulator" ]]; then
+            sudo rm -rf "$ANDROID_SDK_ROOT/emulator"
+          fi
+          if command -v docker >/dev/null 2>&1; then
+            docker system prune --all --force --volumes || true
+          fi
+          echo "Disk space after cleanup:"
+          df -h /
+          avail_kb="$(df -Pk / | awk 'NR==2 {print $4}')"
+          if [[ "$avail_kb" -lt 6000000 ]]; then
+            echo "::warning::Less than 6 GB free after cleanup; multi-ABI native build may run out of disk."
+          fi
+
       - name: Install Android SDK packages
         run: |
           yes | sdkmanager --licenses >/dev/null || true
