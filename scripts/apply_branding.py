@@ -291,7 +291,7 @@ def main() -> int:
 
     tabs_activity_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java"
     tabs_activity = tabs_activity_path.read_text(encoding="utf-8")
-    old_tab_max = "tabsView.setMaxWidth(dp(368 + DialogsActivity.MAIN_TABS_MARGIN * 2));"
+    old_tab_max = "tabsView.setMaxWidth(dp(328 + DialogsActivity.MAIN_TABS_MARGIN * 2));"
     new_tab_max = "tabsView.setMaxWidth(dp(368 + DialogsActivity.MAIN_TABS_MARGIN * 2));"
     if old_tab_max in tabs_activity:
         tabs_activity = tabs_activity.replace(old_tab_max, new_tab_max, 1)
@@ -307,7 +307,7 @@ def main() -> int:
 
     tabs_layout_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/MainTabsLayout.java"
     tabs_layout = tabs_layout_path.read_text(encoding="utf-8")
-    old_selector_alpha = "selectorPaint.setColor(Theme.multAlpha(Theme.getColor(Theme.key_glass_tabSelected, resourcesProvider), 0.16f));"
+    old_selector_alpha = "selectorPaint.setColor(Theme.multAlpha(Theme.getColor(Theme.key_glass_tabSelected, resourcesProvider), 0.09f));"
     new_selector_alpha = "selectorPaint.setColor(Theme.multAlpha(Theme.getColor(Theme.key_glass_tabSelected, resourcesProvider), 0.16f));"
     if old_selector_alpha in tabs_layout:
         tabs_layout = tabs_layout.replace(old_selector_alpha, new_selector_alpha, 1)
@@ -335,7 +335,7 @@ def main() -> int:
             dialog_cell = dialog_cell.replace(old_height, new_height, 1)
         elif new_height not in dialog_cell:
             raise RuntimeError("Could not tune " + label)
-    old_avatar_radius = "avatarImage.setRoundRadius(dp(28));"
+    old_avatar_radius = "avatarImage.setRoundRadius(dp(26));"
     new_avatar_radius = "avatarImage.setRoundRadius(dp(28));"
     avatar_count = dialog_cell.count(old_avatar_radius)
     if avatar_count:
