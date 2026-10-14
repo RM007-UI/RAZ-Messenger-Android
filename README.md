@@ -40,11 +40,13 @@ The initial test build used the sample API credentials in the pinned upstream so
 
 The workflow still permits a test-only build with upstream sample credentials when both secrets are absent. Do not distribute that test build publicly.
 
-## Stable signing for test builds
+## Signing consistency and public release
 
-The first build that contains persistent signing may use a newly generated debug key. The original test APK did not include its signing keystore, so Android may require a one-time uninstall/reinstall to move to this stable signing identity. After that migration, subsequent builds are signed with the same debug key using the GitHub Actions cache and a private `RAZ-debug-signing-key-backup` artifact. Keep that artifact private. This is a debug/test signing setup, not a public-release signing key; use a separate release keystore stored in GitHub Actions secrets before public distribution.
+The pinned upstream Telegram Android source explicitly configures the debug APK to use `TMessagesProj/config/release.keystore` with alias `androidkey`. Because each RAZ build downloads the same pinned upstream commit, that signing identity remains the same between these test builds, so a new test APK should update the currently installed RAZ without a signature-mismatch uninstall.
 
-The APK artifact also contains `RAZ-source-overlay.zip` with the important project customization files and `RAZ-signing-certificate-sha256.txt` for comparing the signer across builds.
+Important security distinction: this is a keystore shipped in the public upstream source, not a private RAZ release key. It is suitable only for internal/test builds and must not be used for a public distribution. A real public release needs a newly generated RAZ-owned release keystore kept out of source control and supplied to GitHub Actions through secrets.
+
+The APK artifact contains `RAZ-source-overlay.zip` with the important project customization files and `RAZ-signing-certificate-sha256.txt` so the signing identity can be compared across builds. A separate `RAZ-upstream-test-signing-key-reference` artifact backs up the actual test keystore used for reproducible test builds.
 
 ## Performance principles
 

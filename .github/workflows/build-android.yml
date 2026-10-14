@@ -13,10 +13,9 @@ on:
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
-  group: raz-android-build-arm64-optimized-v2
+  group: raz-android-build-arm64-optimized
   cancel-in-progress: true
 
 jobs:
@@ -39,46 +38,6 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
-
-      - name: Restore persistent RAZ debug signing key
-        id: raz-signing-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: raz-debug-signing-v1
-
-      - name: Restore signing key from previous private artifact or initialize it
-        if: steps.raz-signing-cache.outputs.cache-hit != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.android"
-          restored=false
-          previous_run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build-android.yml --branch main --status completed --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)"
-          if [[ -n "$previous_run_id" ]]; then
-            restore_dir="$RUNNER_TEMP/raz-signing-restore"
-            mkdir -p "$restore_dir"
-            if gh run download "$previous_run_id" --repo "$GITHUB_REPOSITORY" --name RAZ-debug-signing-key-backup --dir "$restore_dir" >/dev/null 2>&1; then
-              if [[ -f "$restore_dir/debug.keystore" ]]; then
-                install -m 600 "$restore_dir/debug.keystore" "$HOME/.android/debug.keystore"
-                restored=true
-                echo "Restored the persistent RAZ debug signing key from a previous private artifact."
-              fi
-            fi
-          fi
-          if [[ "$restored" != true ]]; then
-            keytool -genkeypair -v \
-              -keystore "$HOME/.android/debug.keystore" \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=RAZ Debug, OU=RAZ, O=RM007-UI, C=US"
-            chmod 600 "$HOME/.android/debug.keystore"
-            echo "Created the first persistent RAZ debug signing key."
-          fi
 
       - name: Validate API secrets (optional for test-only build)
         shell: bash
@@ -161,7 +120,7 @@ jobs:
           mkdir -p artifact "$RUNNER_TEMP/raz-source-overlay"
           cp upstream/TMessagesProj_App/build/outputs/apk/afat/debug/app.apk artifact/RAZ-debug-arm64.apk
           cp upstream-commit.txt artifact/
-          keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey \
+          keytool -list -v -keystore "upstream/TMessagesProj/config/release.keystore" -storepass android -alias androidkey \
             | awk '/SHA256:/ {print $0}' > artifact/RAZ-signing-certificate-sha256.txt
           test -s artifact/RAZ-signing-certificate-sha256.txt
 
@@ -175,11 +134,11 @@ jobs:
           printf '%s\n' \
             'RAZ - یادداشت امضای نسخه آزمایشی' \
             '' \
-            'این APK با کلید امضای debug ثابت برای بیلدهای شخصی RAZ امضا می‌شود.' \
+            'این APK با keystore آزمایشیِ موجود در سورس pinned تلگرام امضا می‌شود؛ بیلدهای همین سورس اثرانگشت یکسان دارند.' \
             'فینگرپرینت گواهی در فایل RAZ-signing-certificate-sha256.txt داخل بسته APK/Source artifact است.' \
-            'فایل debug.keystore به‌عنوان artifact جداگانه با نام RAZ-debug-signing-key-backup نگه‌داری می‌شود' \
-            'و workflow در اجرای بعدی ابتدا cache و سپس آخرین artifact خصوصی را برای بازیابی کلید بررسی می‌کند.' \
-            'این کلید و این APK مخصوص تست شخصی است؛ کلید debug را برای انتشار عمومی استفاده نکنید.' \
+            'فایل keystore آزمایشی با نام RAZ-upstream-test-signing-key-reference به‌عنوان artifact جداگانه نگه‌داری می‌شود' \
+            'این کلید در سورس عمومی upstream موجود است و برای انتشار عمومی امن یا خصوصی محسوب نمی‌شود.' \
+            'این APK فقط برای تست است؛ برای انتشار عمومی باید کلید release اختصاصی RAZ را خصوصی نگه داشت.' \
             'برای انتشار عمومی باید کلید release جداگانه، نگهداری امن آن و تنظیم secrets انجام شود.' \
             > "$overlay/SIGNING_NOTES_FA.txt"
           (cd "$overlay" && zip -qr "$GITHUB_WORKSPACE/artifact/RAZ-source-overlay.zip" .)
@@ -192,11 +151,10 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Upload persistent signing key backup (private repo only)
-        if: always()
+      - name: Upload pinned upstream test signing keystore reference
         uses: actions/upload-artifact@v4
         with:
-          name: RAZ-debug-signing-key-backup
-          path: ~/.android/debug.keystore
+          name: RAZ-upstream-test-signing-key-reference
+          path: upstream/TMessagesProj/config/release.keystore
           if-no-files-found: error
           retention-days: 90
