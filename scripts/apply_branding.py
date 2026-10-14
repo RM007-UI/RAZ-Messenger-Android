@@ -395,6 +395,19 @@ def main() -> int:
         raise RuntimeError("Could not attach the RAZ pill-style compose background")
     compose_path.write_text(compose_source, encoding="utf-8")
 
+    # Enable Telegram's native per-message Translate action on fresh installs.
+    # This is message translation (TranslateAlert2 / messages.translateText), not a free-text input box.
+    # Preserve an explicit user choice if they have already switched the setting off.
+    translate_controller_path = upstream / "TMessagesProj/src/main/java/org/telegram/messenger/TranslateController.java"
+    translate_controller = translate_controller_path.read_text(encoding="utf-8")
+    old_context_translate_default = 'contextTranslateEnabled = messagesController.getMainSettings().getBoolean("translate_button", MessagesController.getGlobalMainSettings().getBoolean("translate_button", false));'
+    new_context_translate_default = 'contextTranslateEnabled = messagesController.getMainSettings().getBoolean("translate_button", MessagesController.getGlobalMainSettings().getBoolean("translate_button", true));'
+    if old_context_translate_default in translate_controller:
+        translate_controller = translate_controller.replace(old_context_translate_default, new_context_translate_default, 1)
+    elif new_context_translate_default not in translate_controller:
+        raise RuntimeError("Could not enable Telegram's native per-message Translate action")
+    translate_controller_path.write_text(translate_controller, encoding="utf-8")
+
     # Make Telegram's official translation panel discoverable when the current chat has translatable messages.
     # The Telegram controller/API and Premium gate are preserved: non-Premium users still see the official paywall.
     chat_activity_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java"

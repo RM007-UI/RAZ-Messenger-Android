@@ -51,7 +51,7 @@ The APK artifact contains `RAZ-source-overlay.zip` with the important project cu
 
 ## Translation and proxy compatibility
 
-RAZ reuses the translation interface/controller already present in the pinned Telegram Android source. The chat banner is surfaced for chats with translatable messages, and the official Premium gating remains unchanged.
+RAZ reuses Telegram's native per-message translation UI (`TranslateAlert2`) and `messages.translateText` API from the pinned source. The Show Translate Button preference defaults to enabled on fresh installs, so users can translate message text in-place via Telegram's own message-translation action; there is no separate free-text translator field. Existing explicit user choices are preserved. The whole-chat live translation preference and Premium entitlement checks remain upstream-owned and are not bypassed.
 
 The current proxy editor retains the upstream Telegram-supported proxy types (SOCKS5, MTProto, and Telegram web proxy). Other tunnel/profile formats are not implemented in this build, so the UI does not claim they connect.
 
