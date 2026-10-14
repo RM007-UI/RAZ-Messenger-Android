@@ -262,12 +262,21 @@ def main() -> int:
     # Default to Telegram's existing dark theme only when the user has not chosen a theme.
     theme_java_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java"
     theme_java = theme_java_path.read_text(encoding="utf-8")
-    theme_java = one(
-        r'String theme = preferences\.getString\("theme", null\);',
-        'String theme = preferences.getString("theme", "Dark");',
-        theme_java,
-        "RAZ first-run dark theme default",
-    )
+    old_theme_lookup = r'String theme = preferences\\.getString\\("theme", null\\);'
+    new_theme_lookup = r'''
+            if (!preferences.getBoolean("raz_ios_style_v2_migrated", false)) {
+                preferences.edit()
+                        .putString("theme", "Dark")
+                        .putString("nighttheme", "Dark")
+                        .putBoolean("raz_ios_style_v2_migrated", true)
+                        .apply();
+            }
+            String theme = preferences.getString("theme", "Dark");
+'''
+    if old_theme_lookup in theme_java:
+        theme_java = theme_java.replace(old_theme_lookup, new_theme_lookup.strip("\\n"), 1)
+    elif 'raz_ios_style_v2_migrated' not in theme_java:
+        raise RuntimeError("Could not migrate existing installs to the RAZ dark theme")
     theme_java_path.write_text(theme_java, encoding="utf-8")
 
     # The pinned upstream already includes a blur-backed glass tab bar. Tune its dark glass
@@ -550,9 +559,21 @@ def main() -> int:
     get_typeface_anchor = "public static Typeface getTypeface(String assetPath) {\n        synchronized (typefaceCache) {"
     get_typeface_replacement = """public static Typeface getTypeface(String assetPath) {
         synchronized (typefaceCache) {
-            if (TYPEFACE_ROBOTO_MEDIUM.equals(assetPath)) {
+            if (assetPath != null && (
+                    assetPath.endsWith("rregular.ttf") ||
+                    assetPath.endsWith("rmedium.ttf") ||
+                    assetPath.endsWith("rbold.ttf") ||
+                    assetPath.endsWith("rmediumitalic.ttf"))) {
                 if (!typefaceCache.containsKey(assetPath)) {
-                    typefaceCache.put(assetPath, Typeface.create(getRazTypeface(), Typeface.BOLD));
+                    int razStyle = Typeface.NORMAL;
+                    if (assetPath.endsWith("rmedium.ttf") || assetPath.endsWith("rbold.ttf")) {
+                        razStyle = Typeface.BOLD;
+                    } else if (assetPath.endsWith("rmediumitalic.ttf")) {
+                        razStyle = Typeface.BOLD_ITALIC;
+                    } else if (assetPath.endsWith("ritalic.ttf")) {
+                        razStyle = Typeface.ITALIC;
+                    }
+                    typefaceCache.put(assetPath, Typeface.create(getRazTypeface(), razStyle));
                 }
                 return typefaceCache.get(assetPath);
             }"""
