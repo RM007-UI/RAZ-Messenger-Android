@@ -13,7 +13,8 @@ RAZ is an independent Android client based on the official [Telegram for Android
 
 - Deep graphite/black surfaces, cool silver highlights, and an iOS-inspired blue accent.
 - The pinned Telegram source already contains a blur-backed glass navigation bar. RAZ tunes the glass tab palette instead of applying expensive blur to the entire message content.
-- Inter is used for the Latin interface; Noto Sans Arabic is the preferred Arabic-script fallback on Android 10+ for Persian readability. Both fonts are bundled under the SIL Open Font License; their license texts are included in the APK assets and the source tree's third-party notices.
+- Chat translation uses Telegram's existing translation controller and API. A translucent iOS-inspired translation capsule is shown in chats with translatable messages; Premium access checks are preserved.
+- Inter is used for Latin UI text; Noto Sans Arabic is the Arabic-script fallback on Android 10+ for Persian readability. Apple San Francisco is not bundled because Apple's font license does not grant general redistribution inside Android APKs; the fonts offered on third-party Iranian sites are modified builds with unclear app-embedding rights. Both fonts are bundled under the SIL Open Font License; their license texts are included in the APK assets and the source tree's third-party notices.
 - A custom geometric dark launcher icon replaces Telegram's standard paper-plane branding.
 - The first-run theme defaults to dark without overriding a theme the user has already selected.
 
@@ -47,6 +48,12 @@ The pinned upstream Telegram Android source explicitly configures the debug APK 
 Important security distinction: this is a keystore shipped in the public upstream source, not a private RAZ release key. It is suitable only for internal/test builds and must not be used for a public distribution. A real public release needs a newly generated RAZ-owned release keystore kept out of source control and supplied to GitHub Actions through secrets.
 
 The APK artifact contains `RAZ-source-overlay.zip` with the important project customization files and `RAZ-signing-certificate-sha256.txt` so the signing identity can be compared across builds. A separate `RAZ-upstream-test-signing-key-reference` artifact backs up the actual test keystore used for reproducible test builds.
+
+## Translation and proxy compatibility
+
+RAZ reuses the translation interface/controller already present in the pinned Telegram Android source. The chat banner is surfaced for chats with translatable messages, and the official Premium gating remains unchanged.
+
+The current proxy editor retains the upstream Telegram-supported proxy types (SOCKS5, MTProto, and Telegram web proxy). Other tunnel/profile formats are not implemented in this build, so the UI does not claim they connect.
 
 ## Performance principles
 

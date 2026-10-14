@@ -304,6 +304,7 @@ def main() -> int:
         "chats_nameMessage_threeLines": "FFA1A8B5",
         "chats_unreadCounter": "FF0A84FF",
         "telegram_color": "FF0A84FF",
+        "chat_addContact": "FF64A9FF",
         "chat_outBubbleSelected": "FF0769D8",
         "chat_inBubbleSelected": "FF303746",
         "chats_actionBackground": "FF222630",
@@ -351,7 +352,7 @@ def main() -> int:
     bubble_source = bubble_path.read_text(encoding="utf-8")
     bubble_source, count = re.subn(
         r'newRad = dp\(SharedConfig\.bubbleRadius\);',
-        'newRad = dp(Math.max(20, SharedConfig.bubbleRadius));',
+        'newRad = dp(Math.max(18, SharedConfig.bubbleRadius));',
         bubble_source,
         count=1,
     )
@@ -363,8 +364,8 @@ def main() -> int:
     )
     bubble_source, count = re.subn(
         radius_pattern,
-        lambda match: match.group(1) + 'rad = dp(Math.max(20, SharedConfig.bubbleRadius));\n'
-            + match.group(1) + 'nearRad = dp(12);',
+        lambda match: match.group(1) + 'rad = dp(Math.max(18, SharedConfig.bubbleRadius));\n'
+            + match.group(1) + 'nearRad = dp(10);',
         bubble_source,
     )
     if count < 2:
@@ -383,9 +384,9 @@ def main() -> int:
         r'\1'
         '        android.graphics.drawable.GradientDrawable razComposeBackground = '
         'new android.graphics.drawable.GradientDrawable();\n'
-        '        razComposeBackground.setColor(Color.argb(236, 28, 32, 42));\n'
+        '        razComposeBackground.setColor(Color.argb(200, 28, 32, 42));\n'
         '        razComposeBackground.setCornerRadius(dp(23));\n'
-        '        razComposeBackground.setStroke(dp(1), Color.argb(42, 220, 230, 248));\n'
+        '        razComposeBackground.setStroke(dp(1), Color.argb(86, 220, 230, 248));\n'
         '        frameLayout.setBackground(razComposeBackground);\n'
         r'\2'
     )
@@ -393,6 +394,60 @@ def main() -> int:
     if count != 1:
         raise RuntimeError("Could not attach the RAZ pill-style compose background")
     compose_path.write_text(compose_source, encoding="utf-8")
+
+    # Make Telegram's official translation panel discoverable when the current chat has translatable messages.
+    # The Telegram controller/API and Premium gate are preserved: non-Premium users still see the official paywall.
+    chat_activity_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java"
+    chat_activity = chat_activity_path.read_text(encoding="utf-8")
+    old_show_translate = """boolean showTranslate = (
+            getUserConfig().isPremium() || currentChat != null && currentChat.autotranslation ?
+                getMessagesController().getTranslateController().isDialogTranslatable(getDialogId()) && !getMessagesController().getTranslateController().isTranslateDialogHidden(getDialogId()) :
+                !getMessagesController().premiumFeaturesBlocked() && preferences.getInt("dialog_show_translate_count" + did, 5) <= 0
+        ) || DEBUG_TOP_PANELS;"""
+    new_show_translate = """boolean showTranslate = (
+            getMessagesController().getTranslateController().isDialogTranslatable(getDialogId()) &&
+            (
+                !getMessagesController().getTranslateController().isTranslateDialogHidden(getDialogId()) &&
+                (
+                    getUserConfig().isPremium() || currentChat != null && currentChat.autotranslation ||
+                    (!getMessagesController().premiumFeaturesBlocked() && preferences.getInt("dialog_show_translate_count" + did, 0) <= 0)
+                )
+            )
+        ) || DEBUG_TOP_PANELS;"""
+    if old_show_translate in chat_activity:
+        chat_activity = chat_activity.replace(old_show_translate, new_show_translate, 1)
+    elif new_show_translate not in chat_activity:
+        raise RuntimeError("Could not locate the official chat translation panel visibility logic")
+    chat_activity_path.write_text(chat_activity, encoding="utf-8")
+
+    # Restyle Telegram's existing translation panel as a translucent iOS-inspired blue capsule.
+    # Entitlements and button callbacks remain upstream-owned; no Premium checks are bypassed.
+    translate_button_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/Components/TranslateButton.java"
+    translate_button = translate_button_path.read_text(encoding="utf-8")
+    old_update_colors = """    public void updateColors() {
+        textView.setTextColor(Theme.getColor(Theme.key_chat_addContact, resourcesProvider));
+        textView.setBackground(Theme.createInsetRoundRectDrawable(Theme.getColor(Theme.key_chat_addContact, resourcesProvider) & 0x19ffffff, dp(15), dp(3)));
+        menuView.setBackground(Theme.createCircleSelectorDrawable(Theme.getColor(Theme.key_listSelector, resourcesProvider), 0, 0));
+        menuView.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_chat_topPanelClose, resourcesProvider), PorterDuff.Mode.MULTIPLY));
+        translateDrawable.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_chat_addContact, resourcesProvider), PorterDuff.Mode.MULTIPLY));
+    }"""
+    new_update_colors = """    public void updateColors() {
+        textView.setTextColor(android.graphics.Color.rgb(142, 198, 255));
+        GradientDrawable razTranslationGlass = new GradientDrawable();
+        razTranslationGlass.setShape(GradientDrawable.RECTANGLE);
+        razTranslationGlass.setColor(android.graphics.Color.argb(46, 10, 132, 255));
+        razTranslationGlass.setCornerRadius(dp(18));
+        razTranslationGlass.setStroke(dp(1), android.graphics.Color.argb(100, 128, 185, 255));
+        textView.setBackground(razTranslationGlass);
+        menuView.setBackground(Theme.createCircleSelectorDrawable(Theme.getColor(Theme.key_listSelector, resourcesProvider), 0, 0));
+        menuView.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_chat_topPanelClose, resourcesProvider), PorterDuff.Mode.MULTIPLY));
+        translateDrawable.setColorFilter(new PorterDuffColorFilter(android.graphics.Color.rgb(142, 198, 255), PorterDuff.Mode.MULTIPLY));
+    }"""
+    if old_update_colors in translate_button:
+        translate_button = translate_button.replace(old_update_colors, new_update_colors, 1)
+    elif new_update_colors not in translate_button:
+        raise RuntimeError("Could not locate Telegram TranslateButton color styling")
+    translate_button_path.write_text(translate_button, encoding="utf-8")
 
     # Build a composite typeface on Android 10+ so Latin uses Inter and Arabic-script text
     # (including Persian) prefers Noto Sans Arabic; older Android releases fall back safely.
