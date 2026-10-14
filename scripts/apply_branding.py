@@ -511,13 +511,7 @@ def main() -> int:
         ) || DEBUG_TOP_PANELS;"""
     new_show_translate = """boolean showTranslate = (
             getMessagesController().getTranslateController().isDialogTranslatable(getDialogId()) &&
-            (
-                !getMessagesController().getTranslateController().isTranslateDialogHidden(getDialogId()) &&
-                (
-                    getUserConfig().isPremium() || currentChat != null && currentChat.autotranslation ||
-                    (!getMessagesController().premiumFeaturesBlocked() && preferences.getInt("dialog_show_translate_count" + did, 0) <= 0)
-                )
-            )
+            !getMessagesController().getTranslateController().isTranslateDialogHidden(getDialogId())
         ) || DEBUG_TOP_PANELS;"""
     if old_show_translate in chat_activity:
         chat_activity = chat_activity.replace(old_show_translate, new_show_translate, 1)
@@ -525,8 +519,9 @@ def main() -> int:
         raise RuntimeError("Could not locate the official chat translation panel visibility logic")
     chat_activity_path.write_text(chat_activity, encoding="utf-8")
 
-    # Restyle Telegram's existing translation panel as a translucent iOS-inspired blue capsule.
-    # Entitlements and button callbacks remain upstream-owned; no Premium checks are bypassed.
+    # Restyle Telegram's existing top-of-chat translation bar as a full-width translucent glass capsule.
+    # Show it whenever the dialog is translatable and not explicitly hidden. Actual translation stays on
+    # Telegram's native controller; automatic translation eligibility and Premium gates remain upstream-owned.
     translate_button_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/Components/TranslateButton.java"
     translate_button = translate_button_path.read_text(encoding="utf-8")
     old_update_colors = """    public void updateColors() {
@@ -537,16 +532,22 @@ def main() -> int:
         translateDrawable.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_chat_addContact, resourcesProvider), PorterDuff.Mode.MULTIPLY));
     }"""
     new_update_colors = """    public void updateColors() {
-        textView.setTextColor(android.graphics.Color.rgb(142, 198, 255));
-        GradientDrawable razTranslationGlass = new GradientDrawable();
+        int razBlue = android.graphics.Color.rgb(10, 132, 255);
+        textView.setTextColor(android.graphics.Color.rgb(166, 207, 255));
+        GradientDrawable razTranslationGlass = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[] { android.graphics.Color.argb(42, 235, 245, 255), android.graphics.Color.argb(20, 150, 180, 220) }
+        );
         razTranslationGlass.setShape(GradientDrawable.RECTANGLE);
-        razTranslationGlass.setColor(android.graphics.Color.argb(46, 10, 132, 255));
-        razTranslationGlass.setCornerRadius(dp(18));
-        razTranslationGlass.setStroke(dp(1), android.graphics.Color.argb(100, 128, 185, 255));
-        textView.setBackground(razTranslationGlass);
+        razTranslationGlass.setCornerRadius(dp(19));
+        razTranslationGlass.setStroke(dp(1), android.graphics.Color.argb(100, 154, 195, 255));
+        setBackground(razTranslationGlass);
+        setElevation(dp(2));
+        setClipToOutline(true);
+        textView.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         menuView.setBackground(Theme.createCircleSelectorDrawable(Theme.getColor(Theme.key_listSelector, resourcesProvider), 0, 0));
-        menuView.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_chat_topPanelClose, resourcesProvider), PorterDuff.Mode.MULTIPLY));
-        translateDrawable.setColorFilter(new PorterDuffColorFilter(android.graphics.Color.rgb(142, 198, 255), PorterDuff.Mode.MULTIPLY));
+        menuView.setColorFilter(new PorterDuffColorFilter(android.graphics.Color.rgb(188, 213, 247), PorterDuff.Mode.MULTIPLY));
+        translateDrawable.setColorFilter(new PorterDuffColorFilter(android.graphics.Color.rgb(166, 207, 255), PorterDuff.Mode.MULTIPLY));
     }"""
     if old_update_colors in translate_button:
         translate_button = translate_button.replace(old_update_colors, new_update_colors, 1)
