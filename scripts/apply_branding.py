@@ -277,6 +277,73 @@ def main() -> int:
         raise RuntimeError("Could not migrate existing installs to the RAZ dark theme")
     theme_java_path.write_text(theme_java, encoding="utf-8")
 
+    # Make the iOS-inspired navigation treatment visible by default, with a fuller floating glass dock.
+    # Also make the conversation list breathe more like Telegram iOS instead of relying on colors alone.
+    tabs_metrics_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java"
+    tabs_metrics = tabs_metrics_path.read_text(encoding="utf-8")
+    old_tabs_metrics = "public static final int MAIN_TABS_HEIGHT = 56;\n    public static final int MAIN_TABS_MARGIN = 8;"
+    new_tabs_metrics = "public static final int MAIN_TABS_HEIGHT = 60;\n    public static final int MAIN_TABS_MARGIN = 10;"
+    if old_tabs_metrics in tabs_metrics:
+        tabs_metrics = tabs_metrics.replace(old_tabs_metrics, new_tabs_metrics, 1)
+    elif new_tabs_metrics not in tabs_metrics:
+        raise RuntimeError("Could not tune the pinned main-tab dimensions")
+    tabs_metrics_path.write_text(tabs_metrics, encoding="utf-8")
+
+    tabs_activity_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java"
+    tabs_activity = tabs_activity_path.read_text(encoding="utf-8")
+    old_tab_max = "tabsView.setMaxWidth(dp(328 + DialogsActivity.MAIN_TABS_MARGIN * 2));"
+    new_tab_max = "tabsView.setMaxWidth(dp(352 + DialogsActivity.MAIN_TABS_MARGIN * 2));"
+    if old_tab_max in tabs_activity:
+        tabs_activity = tabs_activity.replace(old_tab_max, new_tab_max, 1)
+    elif new_tab_max not in tabs_activity:
+        raise RuntimeError("Could not widen the floating RAZ navigation dock")
+    old_liquid_toggle = "iBlur3FactoryGlass.setLiquidGlassEffectAllowed(LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS));"
+    new_liquid_toggle = "iBlur3FactoryGlass.setLiquidGlassEffectAllowed(true);"
+    if old_liquid_toggle in tabs_activity:
+        tabs_activity = tabs_activity.replace(old_liquid_toggle, new_liquid_toggle, 1)
+    elif new_liquid_toggle not in tabs_activity:
+        raise RuntimeError("Could not enable the navigation-layer glass effect")
+    tabs_activity_path.write_text(tabs_activity, encoding="utf-8")
+
+    tabs_layout_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/MainTabsLayout.java"
+    tabs_layout = tabs_layout_path.read_text(encoding="utf-8")
+    old_selector_alpha = "selectorPaint.setColor(Theme.multAlpha(Theme.getColor(Theme.key_glass_tabSelected, resourcesProvider), 0.09f));"
+    new_selector_alpha = "selectorPaint.setColor(Theme.multAlpha(Theme.getColor(Theme.key_glass_tabSelected, resourcesProvider), 0.14f));"
+    if old_selector_alpha in tabs_layout:
+        tabs_layout = tabs_layout.replace(old_selector_alpha, new_selector_alpha, 1)
+    elif new_selector_alpha not in tabs_layout:
+        raise RuntimeError("Could not tune the selected glass-tab capsule")
+    tabs_layout_path.write_text(tabs_layout, encoding="utf-8")
+
+    tabs_cell_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/Components/glass/GlassTabView.java"
+    tabs_cell = tabs_cell_path.read_text(encoding="utf-8")
+    old_tab_label_size = "textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12f);"
+    new_tab_label_size = "textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11f);"
+    if old_tab_label_size in tabs_cell:
+        tabs_cell = tabs_cell.replace(old_tab_label_size, new_tab_label_size, 1)
+    elif new_tab_label_size not in tabs_cell:
+        raise RuntimeError("Could not tune main navigation label size")
+    tabs_cell_path.write_text(tabs_cell, encoding="utf-8")
+
+    dialog_cell_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java"
+    dialog_cell = dialog_cell_path.read_text(encoding="utf-8")
+    for old_height, new_height, label in (
+        ("public int heightDefault = 70;", "public int heightDefault = 74;", "default chat-row height"),
+        ("public int heightThreeLines = 76;", "public int heightThreeLines = 80;", "three-line chat-row height"),
+    ):
+        if old_height in dialog_cell:
+            dialog_cell = dialog_cell.replace(old_height, new_height, 1)
+        elif new_height not in dialog_cell:
+            raise RuntimeError("Could not tune " + label)
+    old_avatar_radius = "avatarImage.setRoundRadius(dp(26));"
+    new_avatar_radius = "avatarImage.setRoundRadius(dp(27));"
+    avatar_count = dialog_cell.count(old_avatar_radius)
+    if avatar_count:
+        dialog_cell = dialog_cell.replace(old_avatar_radius, new_avatar_radius)
+    elif new_avatar_radius not in dialog_cell:
+        raise RuntimeError("Could not tune the chat-list avatar size")
+    dialog_cell_path.write_text(dialog_cell, encoding="utf-8")
+
     # The pinned upstream already includes a blur-backed glass tab bar. Tune its dark glass
     # palette rather than adding costly blur layers throughout the message content.
     def signed_argb(color_hex: str) -> str:
@@ -324,6 +391,9 @@ def main() -> int:
         "chat_messagePanelHint": "FF8F97A6",
         "chat_messagePanelVoiceBackground": "FF20242D",
         "chat_topPanelLine": "FF2B303A",
+        "glass_tabUnselected": "FF8A93A3",
+        "glass_tabSelected": "FF0A84FF",
+        "glass_tabSelectedText": "FF0A84FF",
         "glass_defaultIcon": "DFF5F7FC",
         "glass_defaultText": "DFF5F7FC",
         "glass_targetMainTabs": "B81A1D25",
