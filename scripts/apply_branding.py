@@ -569,7 +569,7 @@ def main() -> int:
 
     # Restyle Telegram's existing top-of-chat translation bar as a full-width translucent glass capsule.
     # The bar stays visible even before language detection marks messages as translatable; translation is
-    # performed by Telegram's native TranslateController and messages.translateText flow.
+    # performed by Telegram's native TranslateController with its online alternativeTranslate fallback.
     translate_button_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/Components/TranslateButton.java"
     translate_button = translate_button_path.read_text(encoding="utf-8")
     old_update_colors = """    public void updateColors() {
@@ -640,6 +640,23 @@ def main() -> int:
     elif new_alert_premium_gate not in translate_alert:
         raise RuntimeError("Could not remove the Premium gate from full-chat translation dialog")
     translate_alert_path.write_text(translate_alert, encoding="utf-8")
+
+    # Remove the remaining Premium upsell when enabling full-chat translation from Language settings.
+    language_select_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/LanguageSelectActivity.java"
+    language_select = language_select_path.read_text(encoding="utf-8")
+    old_settings_premium_gate = """                        boolean value = !getChatValue();
+                        if (value && !getUserConfig().isPremium()) {
+                            showDialog(new PremiumFeatureBottomSheet(LanguageSelectActivity.this, PremiumPreviewFragment.PREMIUM_FEATURE_TRANSLATIONS, false));
+                            return;
+                        }
+                        getMessagesController().getTranslateController().setChatTranslateEnabled(value);"""
+    new_settings_premium_gate = """                        boolean value = !getChatValue();
+                        getMessagesController().getTranslateController().setChatTranslateEnabled(value);"""
+    if old_settings_premium_gate in language_select:
+        language_select = language_select.replace(old_settings_premium_gate, new_settings_premium_gate, 1)
+    elif new_settings_premium_gate not in language_select:
+        raise RuntimeError("Could not remove the remaining Premium gate from translation settings")
+    language_select_path.write_text(language_select, encoding="utf-8")
 
     # Refine the conversation identity header toward Telegram iOS: a distinct, compact
     # profile image followed by a clear title/status stack. Keep native click targets intact.
