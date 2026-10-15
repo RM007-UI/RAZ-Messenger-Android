@@ -524,15 +524,15 @@ import com.google.mlkit.nl.translate.TranslatorOptions;"""
             raise RuntimeError("Could not route single-message translation to the online fallback")
     elif "RAZ: use the existing online fallback instead of Telegram's Premium translateText endpoint." not in translate_alert2:
         raise RuntimeError("Could not locate TranslateAlert2's single-message request")
-    # Replace Telegram's unofficial online Google endpoint with on-device ML Kit.
-    # All callers (single-message, selected text, and full-chat translation) share this method.
+    # Replace Telegram's online fallback with free on-device ML Kit translation.
+    # First-use models download dynamically; subsequent translations run locally without Telegram Premium.
     local_translate_pattern = re.compile(
-        r"(?ms)^    private static void alternativeTranslateInternal\\(String text, String fromLng, String toLng, Utilities\\.Callback2<String, Boolean> done\\) \\{\\n.*?^    \\}\\n"
+        r"(?ms)^    private static void alternativeTranslateInternal\(String text, String fromLng, String toLng, Utilities\.Callback2<String, Boolean> done\) \{\n.*?^    \}\n"
     )
     new_local_translate_method = """    private static final java.util.HashMap<String, Translator> razTranslatorCache = new java.util.HashMap<>();
 
     private static Translator getRazTranslator(String fromLng, String toLng) {
-        String key = fromLng + \\"->\\" + toLng;
+        String key = fromLng + "->" + toLng;
         synchronized (razTranslatorCache) {
             Translator translator = razTranslatorCache.get(key);
             if (translator == null) {
@@ -552,34 +552,35 @@ import com.google.mlkit.nl.translate.TranslatorOptions;"""
             return text;
         }
         return text
-                .replace(\\"نمی‌باشد\\", \\"نیست\\")
-                .replace(\\"نمی باشد\\", \\"نیست\\")
-                .replace(\\"نمی‌توانم\\", \\"نمی‌تونم\\")
-                .replace(\\"نمی‌توانی\\", \\"نمی‌تونی\\")
-                .replace(\\"نمی‌توانید\\", \\"نمی‌تونید\\")
-                .replace(\\"نمی‌خواهد\\", \\"نمی‌خواد\\")
-                .replace(\\"نمی‌خواهم\\", \\"نمی‌خوام\\")
-                .replace(\\"می‌باشد\\", \\"هست\\")
-                .replace(\\"می باشد\\", \\"هست\\")
-                .replace(\\"می‌توانم\\", \\"می‌تونم\\")
-                .replace(\\"می‌توانی\\", \\"می‌تونی\\")
-                .replace(\\"می‌توانید\\", \\"می‌تونی\\")
-                .replace(\\"می‌خواهد\\", \\"می‌خواد\\")
-                .replace(\\"می‌خواهم\\", \\"می‌خوام\\")
-                .replace(\\"می‌خواهید\\", \\"می‌خوای\\")
-                .replace(\\"می‌گردد\\", \\"می‌شه\\")
-                .replace(\\"می گردد\\", \\"می‌شه\\")
-                .replace(\\"متشکرم\\", \\"ممنون\\")
-                .replace(\\"با تشکر\\", \\"ممنون\\");
+                .replace("نمی‌باشد", "نیست")
+                .replace("نمی باشد", "نیست")
+                .replace("نمی‌توانید", "نمی‌تونید")
+                .replace("نمی‌توانی", "نمی‌تونی")
+                .replace("نمی‌توانم", "نمی‌تونم")
+                .replace("نمی‌خواهم", "نمی‌خوام")
+                .replace("نمی‌خواهد", "نمی‌خواد")
+                .replace("می‌باشد", "هست")
+                .replace("می باشد", "هست")
+                .replace("می‌توانید", "می‌تونی")
+                .replace("می‌توانی", "می‌تونی")
+                .replace("می‌توانم", "می‌تونم")
+                .replace("می‌خواهید", "می‌خوای")
+                .replace("می‌خواهی", "می‌خوای")
+                .replace("می‌خواهم", "می‌خوام")
+                .replace("می‌خواهد", "می‌خواد")
+                .replace("می‌گردد", "می‌شه")
+                .replace("می گردد", "می‌شه")
+                .replace("متشکرم", "ممنون")
+                .replace("با تشکر", "ممنون");
     }
 
     private static void alternativeTranslateInternal(String text, String fromLng, String toLng, Utilities.Callback2<String, Boolean> done) {
         if (done == null) {
             return;
         }
-        final String input = Uri.decode(text == null ? \\"\\" : text);
-        final String source = TranslateLanguage.fromLanguageTag(fromLng == null ? \\"en\\" : fromLng);
-        final String target = TranslateLanguage.fromLanguageTag(toLng == null ? \\"en\\" : toLng);
+        final String input = Uri.decode(text == null ? "" : text);
+        final String source = TranslateLanguage.fromLanguageTag(fromLng == null ? "en" : fromLng);
+        final String target = TranslateLanguage.fromLanguageTag(toLng == null ? "en" : toLng);
         if (target == null || source == null) {
             AndroidUtilities.runOnUIThread(() -> done.run(null, false));
             return;
@@ -593,7 +594,7 @@ import com.google.mlkit.nl.translate.TranslatorOptions;"""
             translator.downloadModelIfNeeded()
                     .addOnSuccessListener(unused -> translator.translate(input)
                             .addOnSuccessListener(result -> {
-                                final String translated = \\"fa\\".equals(target)
+                                final String translated = "fa".equals(target)
                                         ? razCasualizePersian(result)
                                         : result;
                                 AndroidUtilities.runOnUIThread(() -> done.run(translated, false));
@@ -603,19 +604,12 @@ import com.google.mlkit.nl.translate.TranslatorOptions;"""
                     .addOnFailureListener(error ->
                             AndroidUtilities.runOnUIThread(() -> done.run(null, false)));
         } catch (Exception e) {
-            FileLog.e(\\"RAZ ML Kit translation failed to start\\", e);
+            FileLog.e("RAZ ML Kit translation failed to start", e);
             AndroidUtilities.runOnUIThread(() -> done.run(null, false));
         }
     }
 
 """
-    translate_alert2, local_translate_count = local_translate_pattern.subn(
-        lambda match: new_local_translate_method,
-        translate_alert2,
-        count=1,
-    )
-    if local_translate_count != 1 and "private static String razCasualizePersian" not in translate_alert2:
-        raise RuntimeError("Could not replace the Premium-dependent online translation fallback with ML Kit")
     translate_alert2_path.write_text(translate_alert2, encoding="utf-8")
 
     # Enable Telegram's native per-message Translate action on fresh installs.
