@@ -498,10 +498,29 @@ def main() -> int:
         translate_controller = translate_controller.replace(old_context_translate_default, new_context_translate_default, 1)
     elif new_context_translate_default not in translate_controller:
         raise RuntimeError("Could not enable Telegram's native per-message Translate action")
+
+    # RAZ exposes the built-in full-chat translation controller in chats without Telegram Premium.
+    # Keep Telegram's server-side auto-translation availability flag and user setting intact.
+    old_dialog_feature_available = """    public boolean isFeatureAvailable(long dialogId) {
+        if (!getMessagesController().isTranslationsAutoEnabled()) {
+            return false;
+        }
+        final TLRPC.Chat chat = getMessagesController().getChat(-dialogId);
+        return (
+            UserConfig.getInstance(currentAccount).isPremium() ||
+            chat != null && chat.autotranslation
+        );
+    }"""
+    new_dialog_feature_available = """    public boolean isFeatureAvailable(long dialogId) {
+        return getMessagesController().isTranslationsAutoEnabled() && isChatTranslateEnabled();
+    }"""
+    if old_dialog_feature_available in translate_controller:
+        translate_controller = translate_controller.replace(old_dialog_feature_available, new_dialog_feature_available, 1)
+    elif new_dialog_feature_available not in translate_controller:
+        raise RuntimeError("Could not enable RAZ chat translation in TranslateController")
     translate_controller_path.write_text(translate_controller, encoding="utf-8")
 
-    # Make Telegram's official translation panel discoverable when the current chat has translatable messages.
-    # The Telegram controller/API and Premium gate are preserved: non-Premium users still see the official paywall.
+    # Always show the native translation bar in a conversation unless the user explicitly hid it.
     chat_activity_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java"
     chat_activity = chat_activity_path.read_text(encoding="utf-8")
     old_show_translate = """boolean showTranslate = (
@@ -510,7 +529,7 @@ def main() -> int:
                 !getMessagesController().premiumFeaturesBlocked() && preferences.getInt("dialog_show_translate_count" + did, 5) <= 0
         ) || DEBUG_TOP_PANELS;"""
     new_show_translate = """boolean showTranslate = (
-            getMessagesController().getTranslateController().isDialogTranslatable(getDialogId()) &&
+            getDialogId() != 0 &&
             !getMessagesController().getTranslateController().isTranslateDialogHidden(getDialogId())
         ) || DEBUG_TOP_PANELS;"""
     if old_show_translate in chat_activity:
@@ -520,8 +539,8 @@ def main() -> int:
     chat_activity_path.write_text(chat_activity, encoding="utf-8")
 
     # Restyle Telegram's existing top-of-chat translation bar as a full-width translucent glass capsule.
-    # Show it whenever the dialog is translatable and not explicitly hidden. Actual translation stays on
-    # Telegram's native controller; automatic translation eligibility and Premium gates remain upstream-owned.
+    # The bar stays visible even before language detection marks messages as translatable; translation is
+    # performed by Telegram's native TranslateController and messages.translateText flow.
     translate_button_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/Components/TranslateButton.java"
     translate_button = translate_button_path.read_text(encoding="utf-8")
     old_update_colors = """    public void updateColors() {
