@@ -12,7 +12,7 @@ on:
       - 'assets/icons/**'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: raz-android-build-universal
@@ -100,6 +100,35 @@ jobs:
           RAZ_ALLOW_UPSTREAM_TEST_API: '1'
         run: python3 scripts/apply_branding.py upstream
 
+      - name: Set a unique RAZ app version for this build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          properties = Path("upstream/gradle.properties")
+          source = properties.read_text(encoding="utf-8")
+          run_number = int(os.environ["GITHUB_RUN_NUMBER"])
+          run_attempt = int(os.environ["GITHUB_RUN_ATTEMPT"])
+          version_name = f"3.13.{run_number}.{run_attempt}"
+          version_code_match = re.search(r"(?m)^APP_VERSION_CODE=(\\d+)$", source)
+          if not version_code_match:
+              raise SystemExit("Could not find APP_VERSION_CODE in upstream gradle.properties")
+          version_code = int(version_code_match.group(1)) + run_number * 100 + run_attempt
+          source, name_count = re.subn(r"(?m)^APP_VERSION_NAME=.*$", f"APP_VERSION_NAME={version_name}", source, count=1)
+          source, code_count = re.subn(r"(?m)^APP_VERSION_CODE=\\d+$", f"APP_VERSION_CODE={version_code}", source, count=1)
+          if name_count != 1 or code_count != 1:
+              raise SystemExit(f"Could not update RAZ version fields (name={name_count}, code={code_count})")
+          properties.write_text(source, encoding="utf-8")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"RAZ_VERSION_NAME={version_name}\\n")
+              env.write(f"RAZ_VERSION_CODE={version_code}\\n")
+          print(f"RAZ app version: {version_name} (versionCode {version_code})")
+          PY
+
       - name: Configure debug build for ARMv7 + ARM64
         shell: bash
         run: |
@@ -144,7 +173,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifact "$RUNNER_TEMP/raz-source-overlay"
-          cp upstream/TMessagesProj_App/build/outputs/apk/afat/debug/app.apk artifact/RAZ-debug-armv7-arm64.apk
+          apk_name="RAZ-${RAZ_VERSION_NAME}-armv7-arm64.apk"
+          cp upstream/TMessagesProj_App/build/outputs/apk/afat/debug/app.apk "artifact/$apk_name"
+          echo "Versioned APK: $apk_name"
           cp upstream-commit.txt artifact/
           keytool -list -v -keystore "upstream/TMessagesProj/config/release.keystore" -storepass android -alias androidkey \
             | awk '/SHA256:/ {print $0}' > artifact/RAZ-signing-certificate-sha256.txt
@@ -175,7 +206,39 @@ jobs:
           name: RAZ-debug-armv7-arm64
           path: artifact/*
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 90
+
+      - name: Store the APK in GitHub Releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="build-${RAZ_VERSION_NAME}"
+          apk_path="artifact/RAZ-${RAZ_VERSION_NAME}-armv7-arm64.apk"
+          notes="Automated RAZ test build from commit ${GITHUB_SHA}. The APK contains both ARMv7 and ARM64 native libraries. This is a test build, not a stable public release."
+
+          if [[ -n "${TG_API_ID}" && -n "${TG_API_HASH}" ]]; then
+            gh release create "$tag" "$apk_path" \
+              artifact/RAZ-source-overlay.zip \
+              artifact/RAZ-signing-certificate-sha256.txt \
+              artifact/upstream-commit.txt \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "RAZ ${RAZ_VERSION_NAME}" \
+              --notes "$notes" \
+              --prerelease
+            echo "Published RAZ ${RAZ_VERSION_NAME} as a prerelease."
+          else
+            gh release create "$tag" "$apk_path" \
+              artifact/RAZ-source-overlay.zip \
+              artifact/RAZ-signing-certificate-sha256.txt \
+              artifact/upstream-commit.txt \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "RAZ ${RAZ_VERSION_NAME} (draft test build)" \
+              --notes "$notes. Telegram API secrets are not configured, so this draft is not publicly distributed. Add TG_API_ID and TG_API_HASH repository secrets to publish builds as prereleases." \
+              --draft
+            echo "Stored RAZ ${RAZ_VERSION_NAME} in a draft release."
+          fi
 
       - name: Upload pinned upstream test signing keystore reference
         uses: actions/upload-artifact@v4
