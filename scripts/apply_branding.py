@@ -664,31 +664,15 @@ def main() -> int:
     # Route TranslateAlert3's ordinary text/message translation away from Telegram's Premium API too.
     # This sheet has its own requestTranslate() implementation, separate from TranslateAlert2 above.
     ordinary_translate_pattern = re.compile(
-        r"(?ms)^        \\} else \\{\\n\\n            final TLRPC\\.TL_messages_translateText req = new TLRPC\\.TL_messages_translateText\\(\\);.*?^        \\}\\n\\n        adapter\\.update\\(true\\);"
+        r"(?ms)^        \} else \{\n\n            final TLRPC\.TL_messages_translateText req = new TLRPC\.TL_messages_translateText\(\);.*?^        \}\n\n        adapter\.update\(true\);"
     )
     new_ordinary_translate = """        } else {
             // RAZ: use the same online Google fallback as TranslateAlert2, without the Premium-only API.
             TranslateAlert2.alternativeTranslate(fromText.text == null ? "" : fromText.text, null, to_lang, (result, rateLimit) -> {
-                if (result == null) {
-                    translated = LocaleController.getString(rateLimit ? R.string.TranslationFailedAlert1 : R.string.TranslationFailedAlert2);
-                    translatedLoading = false;
-                    if (onUseListener != null) {
-                        button.setLoading(false);
-                        button.setText(getString(R.string.OK));
-                        button.setOnClickListener(v -> dismiss());
-                    }
-                    adapter.update(true);
-                    return;
-                }
-                translated = result;
+                translated = result != null ? result : LocaleController.getString(rateLimit ? R.string.TranslationFailedAlert1 : R.string.TranslationFailedAlert2);
                 translatedLoading = false;
                 if (onUseListener != null) {
                     button.setLoading(false);
-                    button.setText(getString(R.string.OK));
-                    button.setOnClickListener(v -> {
-                        if (onUseListener != null && translated != null) onUseListener.run(translated);
-                        dismiss();
-                    });
                 }
                 adapter.update(true);
             });
