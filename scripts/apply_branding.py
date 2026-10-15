@@ -487,6 +487,26 @@ def main() -> int:
         raise RuntimeError("Could not attach the RAZ pill-style compose background")
     compose_path.write_text(compose_source, encoding="utf-8")
 
+    # Route ordinary single-message translation directly through Telegram's built-in online fallback.
+    # TranslateAlert2 otherwise only falls back when the server returns TRANSLATIONS_DISABLED_ALT,
+    # so Premium-only responses can still leave the user blocked. The local Rooyesh helper is an
+    # offline phrasebook, not a full online translator; this uses Telegram's existing Google fallback.
+    translate_alert2_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/Components/TranslateAlert2.java"
+    translate_alert2 = translate_alert2_path.read_text(encoding="utf-8")
+    old_single_message_request = re.compile(
+        r"(?ms)^        TLRPC\\.TL_messages_translateText req = new TLRPC\\.TL_messages_translateText\\(\\);.*?^        \\}\\);\\n    \\}"
+    )
+    new_single_message_request = """        // RAZ: use the existing online fallback instead of Telegram's Premium translateText endpoint.
+        translateAlt();
+    }"""
+    if old_single_message_request.search(translate_alert2):
+        translate_alert2, single_count = old_single_message_request.subn(new_single_message_request, translate_alert2, count=1)
+        if single_count != 1:
+            raise RuntimeError("Could not route single-message translation to the online fallback")
+    elif "RAZ: use the existing online fallback instead of Telegram's Premium translateText endpoint." not in translate_alert2:
+        raise RuntimeError("Could not locate TranslateAlert2's single-message request")
+    translate_alert2_path.write_text(translate_alert2, encoding="utf-8")
+
     # Enable Telegram's native per-message Translate action on fresh installs.
     # This is message translation (TranslateAlert2 / messages.translateText), not a free-text input box.
     # Preserve an explicit user choice if they have already switched the setting off.
