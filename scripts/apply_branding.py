@@ -519,6 +519,19 @@ def main() -> int:
     elif new_context_translate_default not in translate_controller:
         raise RuntimeError("Could not enable Telegram's native per-message Translate action")
 
+    # Expose per-message translation even when Telegram's remote feature flag disables its native service.
+    old_context_gate = """    public boolean isContextTranslateEnabled() {
+        if (!getMessagesController().isTranslationsManualEnabled()) {
+            return false;
+        }
+        if (contextTranslateEnabled == null) {"""
+    new_context_gate = """    public boolean isContextTranslateEnabled() {
+        if (contextTranslateEnabled == null) {"""
+    if old_context_gate in translate_controller:
+        translate_controller = translate_controller.replace(old_context_gate, new_context_gate, 1)
+    elif new_context_gate not in translate_controller:
+        raise RuntimeError("Could not remove the manual-translation feature gate")
+
     # RAZ chat translation is available without Telegram Premium. The native top bar still
     # respects the user's on/off preference, but not Telegram's server-side Premium gate.
     old_feature_available = """    public boolean isFeatureAvailable() {
@@ -697,6 +710,15 @@ def main() -> int:
     # Remove the remaining Premium upsell when enabling full-chat translation from Language settings.
     language_select_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/LanguageSelectActivity.java"
     language_select = language_select_path.read_text(encoding="utf-8")
+    # Keep the chat-translation option visible even when Telegram's server hides Premium rows.
+    old_settings_row_gate = "if (getMessagesController().isTranslationsAutoEnabled() && !getMessagesController().premiumFeaturesBlocked()) {"
+    new_settings_row_gate = "if (getMessagesController().isTranslationsManualEnabled() || getMessagesController().isTranslationsAutoEnabled()) {"
+    row_gate_count = language_select.count(old_settings_row_gate)
+    if row_gate_count:
+        language_select = language_select.replace(old_settings_row_gate, new_settings_row_gate)
+    elif new_settings_row_gate not in language_select:
+        raise RuntimeError("Could not expose translation settings without Telegram Premium")
+
     old_settings_premium_gate = """                        boolean value = !getChatValue();
                         if (value && !getUserConfig().isPremium()) {
                             showDialog(new PremiumFeatureBottomSheet(LanguageSelectActivity.this, PremiumPreviewFragment.PREMIUM_FEATURE_TRANSLATIONS, false));
@@ -718,6 +740,18 @@ def main() -> int:
     elif new_locked_translate_icon not in language_select:
         raise RuntimeError("Could not remove the Premium lock icon from translation settings")
     language_select_path.write_text(language_select, encoding="utf-8")
+
+    # Fail the build rather than silently leaving any of the known Premium gates in the patched source.
+    translation_sanity = {
+        "TranslateAlert3 Premium upsell": (translate_alert, "new PremiumFeatureBottomSheet(getContext(), PremiumPreviewFragment.PREMIUM_FEATURE_TRANSLATIONS"),
+        "LanguageSelect Premium upsell": (language_select, "showDialog(new PremiumFeatureBottomSheet(LanguageSelectActivity.this, PremiumPreviewFragment.PREMIUM_FEATURE_TRANSLATIONS"),
+        "LanguageSelect lock icon": (language_select, "cell.setCheckBoxIcon(!getUserConfig().isPremium() ? R.drawable.permission_locked : 0);"),
+        "TranslateButton Premium menu gate": (translate_button, "if (UserConfig.getInstance(currentAccount).isPremium() || chat != null && chat.autotranslation) {"),
+        "TranslateController server manual flag": (translate_controller, "if (!getMessagesController().isTranslationsManualEnabled()) {"),
+    }
+    remaining = [label for label, (source, needle) in translation_sanity.items() if needle in source]
+    if remaining:
+        raise RuntimeError("Translation Premium gates remain after RAZ patches: " + ", ".join(remaining))
 
     # Refine the conversation identity header toward Telegram iOS: a distinct, compact
     # profile image followed by a clear title/status stack. Keep native click targets intact.
