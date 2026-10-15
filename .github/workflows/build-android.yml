@@ -166,13 +166,40 @@ jobs:
           store_password = os.environ["RAZ_RELEASE_STORE_PASSWORD"]
           key_alias = os.environ["RAZ_RELEASE_KEY_ALIAS"]
           key_password = os.environ["RAZ_RELEASE_KEY_PASSWORD"]
-          if any("\n" in value or "\r" in value for value in (store_password, key_alias, key_password)):
+          if any("\\n" in value or "\\r" in value for value in (store_password, key_alias, key_password)):
               raise SystemExit("Release signing secrets must not contain newlines")
           subprocess.run(
               ["keytool", "-list", "-keystore", str(keystore), "-storepass", store_password, "-alias", key_alias],
               check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
           )
-          print("Validated the private RAZ release keystore and alias.")
+
+          # Write passwords only into the ephemeral build runner; this file is never an artifact.
+          properties = Path("upstream/gradle.properties")
+          source = properties.read_text(encoding="utf-8")
+          def escape_property(value):
+              return (value.replace("\\\\", "\\\\\\\\")
+                           .replace("\\t", "\\\\t")
+                           .replace("\\f", "\\\\f")
+                           .replace(" ", "\\\\ ")
+                           .replace(":", "\\\\:")
+                           .replace("=", "\\\\=")
+                           .replace("#", "\\\\#")
+                           .replace("!", "\\\\!"))
+          for name, value in (
+              ("RELEASE_STORE_PASSWORD", store_password),
+              ("RELEASE_KEY_ALIAS", key_alias),
+              ("RELEASE_KEY_PASSWORD", key_password),
+          ):
+              import re
+              source, count = re.subn(
+                  rf"(?m)^{re.escape(name)}=.*$",
+                  lambda _match, n=name, v=value: n + "=" + escape_property(v),
+                  source, count=1
+              )
+              if count != 1:
+                  raise SystemExit("Could not configure private RAZ signing property: " + name)
+          properties.write_text(source, encoding="utf-8")
+          print("Validated the private RAZ release keystore and configured signing properties.")
 
       - name: Configure ARMv7 + ARM64 native libraries
         shell: bash
@@ -230,8 +257,9 @@ jobs:
             | awk '/SHA256:/ {print $0}' > artifact/RAZ-signing-certificate-sha256.txt
           test -s artifact/RAZ-signing-certificate-sha256.txt
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose --print-certs "artifact/$apk_name"
-          unzip -l "artifact/$apk_name" | grep -q 'lib/armeabi-v7a/'
-          unzip -l "artifact/$apk_name" | grep -q 'lib/arm64-v8a/'
+          unzip -Z1 "artifact/$apk_name" > "$RUNNER_TEMP/raz-apk-files.txt"
+          grep 'lib/armeabi-v7a/' "$RUNNER_TEMP/raz-apk-files.txt" >/dev/null
+          grep 'lib/arm64-v8a/' "$RUNNER_TEMP/raz-apk-files.txt" >/dev/null
           echo "Validated APK signature and both ARM ABIs."
 
           overlay="$RUNNER_TEMP/raz-source-overlay"
