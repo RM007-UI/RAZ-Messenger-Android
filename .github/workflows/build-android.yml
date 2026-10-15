@@ -166,7 +166,7 @@ jobs:
           store_password = os.environ["RAZ_RELEASE_STORE_PASSWORD"]
           key_alias = os.environ["RAZ_RELEASE_KEY_ALIAS"]
           key_password = os.environ["RAZ_RELEASE_KEY_PASSWORD"]
-          if any("\\n" in value or "\\r" in value for value in (store_password, key_alias, key_password)):
+          if any("\n" in value or "\r" in value for value in (store_password, key_alias, key_password)):
               raise SystemExit("Release signing secrets must not contain newlines")
           subprocess.run(
               ["keytool", "-list", "-keystore", str(keystore), "-storepass", store_password, "-alias", key_alias],
@@ -177,20 +177,33 @@ jobs:
           properties = Path("upstream/gradle.properties")
           source = properties.read_text(encoding="utf-8")
           def escape_property(value):
-              return (value.replace("\\\\", "\\\\\\\\")
-                           .replace("\\t", "\\\\t")
-                           .replace("\\f", "\\\\f")
-                           .replace(" ", "\\\\ ")
-                           .replace(":", "\\\\:")
-                           .replace("=", "\\\\=")
-                           .replace("#", "\\\\#")
-                           .replace("!", "\\\\!"))
+              escaped = []
+              for char in value:
+                  if char == "\\":
+                      escaped.append("\\\\")
+                  elif char == " ":
+                      escaped.append("\\ ")
+                  elif char == "\t":
+                      escaped.append("\\t")
+                  elif char == "\f":
+                      escaped.append("\\f")
+                  elif char == ":":
+                      escaped.append("\\:")
+                  elif char == "=":
+                      escaped.append("\\=")
+                  elif char == "#":
+                      escaped.append("\\#")
+                  elif char == "!":
+                      escaped.append("\\!")
+                  else:
+                      escaped.append(char)
+              return "".join(escaped)
+          import re
           for name, value in (
               ("RELEASE_STORE_PASSWORD", store_password),
               ("RELEASE_KEY_ALIAS", key_alias),
               ("RELEASE_KEY_PASSWORD", key_password),
           ):
-              import re
               source, count = re.subn(
                   rf"(?m)^{re.escape(name)}=.*$",
                   lambda _match, n=name, v=value: n + "=" + escape_property(v),
