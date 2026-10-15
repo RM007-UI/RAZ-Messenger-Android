@@ -504,7 +504,7 @@ def main() -> int:
     new_dialog_feature_available = """    public boolean isFeatureAvailable(long dialogId) {
         return getMessagesController().isTranslationsAutoEnabled() && isChatTranslateEnabled();
     }"""
-    feature_gate_pattern = r"(?ms)^    public boolean isFeatureAvailable\\(long dialogId\\) \\{\\n.*?^    \\}"
+    feature_gate_pattern = r"(?ms)^    public boolean isFeatureAvailable\(long dialogId\) \{\n.*?^    \}"
     translate_controller, feature_gate_count = re.subn(
         feature_gate_pattern,
         lambda match: new_dialog_feature_available,
