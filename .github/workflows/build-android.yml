@@ -1,4 +1,4 @@
-name: Build RAZ public prerelease
+name: Build RAZ Android APK
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ on:
       - 'assets/icons/**'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: raz-android-build-universal
@@ -20,16 +20,12 @@ concurrency:
 
 jobs:
   build-universal:
-    name: Build signed release APK (ARMv7 + ARM64)
+    name: Build debug APK (ARMv7 + ARM64)
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     env:
       TG_API_ID: ${{ secrets.TG_API_ID }}
       TG_API_HASH: ${{ secrets.TG_API_HASH }}
-      RAZ_RELEASE_KEYSTORE_BASE64: ${{ secrets.RAZ_RELEASE_KEYSTORE_BASE64 }}
-      RAZ_RELEASE_STORE_PASSWORD: ${{ secrets.RAZ_RELEASE_STORE_PASSWORD }}
-      RAZ_RELEASE_KEY_ALIAS: ${{ secrets.RAZ_RELEASE_KEY_ALIAS }}
-      RAZ_RELEASE_KEY_PASSWORD: ${{ secrets.RAZ_RELEASE_KEY_PASSWORD }}
     steps:
       - name: Checkout RAZ customization files
         uses: actions/checkout@v4
@@ -43,24 +39,14 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
 
-      - name: Validate public-release secrets
+      - name: Validate API secrets (optional for test-only build)
         shell: bash
         run: |
           set -euo pipefail
-          missing=()
-          [[ -n "$TG_API_ID" ]] || missing+=("TG_API_ID")
-          [[ -n "$TG_API_HASH" ]] || missing+=("TG_API_HASH")
-          [[ -n "$RAZ_RELEASE_KEYSTORE_BASE64" ]] || missing+=("RAZ_RELEASE_KEYSTORE_BASE64")
-          [[ -n "$RAZ_RELEASE_STORE_PASSWORD" ]] || missing+=("RAZ_RELEASE_STORE_PASSWORD")
-          [[ -n "$RAZ_RELEASE_KEY_ALIAS" ]] || missing+=("RAZ_RELEASE_KEY_ALIAS")
-          [[ -n "$RAZ_RELEASE_KEY_PASSWORD" ]] || missing+=("RAZ_RELEASE_KEY_PASSWORD")
-          if (( ${#missing[@]} > 0 )); then
-            printf '::error::Missing GitHub Actions secrets: %s\n' "${missing[*]}"
-            echo "::error::Add the required secrets in Settings > Secrets and variables > Actions before publishing."
-            exit 1
-          fi
-          if [[ ! "$TG_API_ID" =~ ^[0-9]+$ || ! "$TG_API_HASH" =~ ^[0-9a-fA-F]{32}$ ]]; then
-            echo "::error::TG_API_ID/TG_API_HASH are invalid; use the values issued for RAZ at my.telegram.org."
+          if [[ -z "$TG_API_ID" && -z "$TG_API_HASH" ]]; then
+            echo "::warning::No personal Telegram API credentials supplied. This build will use the upstream sample credentials for testing only. Do not distribute this APK."
+          elif [[ ! "$TG_API_ID" =~ ^[0-9]+$ || ! "$TG_API_HASH" =~ ^[0-9a-fA-F]{32}$ ]]; then
+            echo "::error::Set both TG_API_ID and TG_API_HASH to valid values, or leave both unset for a test-only build."
             exit 1
           fi
 
@@ -110,6 +96,8 @@ jobs:
           echo "Upstream commit: $(git -C upstream rev-parse HEAD)" | tee upstream-commit.txt
 
       - name: Apply RAZ branding
+        env:
+          RAZ_ALLOW_UPSTREAM_TEST_API: '1'
         run: python3 scripts/apply_branding.py upstream
 
       - name: Set a unique RAZ app version for this build
@@ -141,80 +129,7 @@ jobs:
           print(f"RAZ app version: {version_name} (versionCode {version_code})")
           PY
 
-      - name: Configure RAZ-owned release signing
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import base64
-          import os
-          import subprocess
-          from pathlib import Path
-
-          encoded = os.environ["RAZ_RELEASE_KEYSTORE_BASE64"].strip()
-          try:
-              keystore_bytes = base64.b64decode(encoded, validate=True)
-          except Exception as exc:
-              raise SystemExit("RAZ_RELEASE_KEYSTORE_BASE64 must be a single-line base64 encoding of the RAZ release keystore") from exc
-          if not keystore_bytes:
-              raise SystemExit("The RAZ release keystore secret decoded to an empty file")
-
-          keystore = Path("upstream/TMessagesProj/config/release.keystore")
-          keystore.write_bytes(keystore_bytes)
-          keystore.chmod(0o600)
-
-          store_password = os.environ["RAZ_RELEASE_STORE_PASSWORD"]
-          key_alias = os.environ["RAZ_RELEASE_KEY_ALIAS"]
-          key_password = os.environ["RAZ_RELEASE_KEY_PASSWORD"]
-          if any("\n" in value or "\r" in value for value in (store_password, key_alias, key_password)):
-              raise SystemExit("Release signing secrets must not contain newlines")
-          subprocess.run(
-              ["keytool", "-list", "-keystore", str(keystore), "-storepass", store_password, "-alias", key_alias],
-              check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-          )
-
-          # Write passwords only into the ephemeral build runner; this file is never an artifact.
-          properties = Path("upstream/gradle.properties")
-          source = properties.read_text(encoding="utf-8")
-          def escape_property(value):
-              escaped = []
-              for char in value:
-                  if char == "\\":
-                      escaped.append("\\\\")
-                  elif char == " ":
-                      escaped.append("\\ ")
-                  elif char == "\t":
-                      escaped.append("\\t")
-                  elif char == "\f":
-                      escaped.append("\\f")
-                  elif char == ":":
-                      escaped.append("\\:")
-                  elif char == "=":
-                      escaped.append("\\=")
-                  elif char == "#":
-                      escaped.append("\\#")
-                  elif char == "!":
-                      escaped.append("\\!")
-                  else:
-                      escaped.append(char)
-              return "".join(escaped)
-          import re
-          for name, value in (
-              ("RELEASE_STORE_PASSWORD", store_password),
-              ("RELEASE_KEY_ALIAS", key_alias),
-              ("RELEASE_KEY_PASSWORD", key_password),
-          ):
-              source, count = re.subn(
-                  rf"(?m)^{re.escape(name)}=.*$",
-                  lambda _match, n=name, v=value: n + "=" + escape_property(v),
-                  source, count=1
-              )
-              if count != 1:
-                  raise SystemExit("Could not configure private RAZ signing property: " + name)
-          properties.write_text(source, encoding="utf-8")
-          print("Validated the private RAZ release keystore and configured signing properties.")
-
-      - name: Configure ARMv7 + ARM64 native libraries
+      - name: Configure debug build for ARMv7 + ARM64
         shell: bash
         run: |
           set -euo pipefail
@@ -243,18 +158,15 @@ jobs:
           print("Configured app and Telegram library native builds for armeabi-v7a and arm64-v8a")
           PY
 
-      - name: Build signed release APK (ARMv7 + ARM64)
+      - name: Build multi-ABI debug APK (ARMv7 + ARM64)
         env:
           GRADLE_OPTS: -Xmx6g -XX:MaxMetaspaceSize=1g
-          ORG_GRADLE_PROJECT_RELEASE_STORE_PASSWORD: ${{ secrets.RAZ_RELEASE_STORE_PASSWORD }}
-          ORG_GRADLE_PROJECT_RELEASE_KEY_ALIAS: ${{ secrets.RAZ_RELEASE_KEY_ALIAS }}
-          ORG_GRADLE_PROJECT_RELEASE_KEY_PASSWORD: ${{ secrets.RAZ_RELEASE_KEY_PASSWORD }}
         shell: bash
         run: |
           set -euo pipefail
           cd upstream
           chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace :TMessagesProj_App:assembleAfatRelease
+          ./gradlew --no-daemon --stacktrace :TMessagesProj_App:assembleAfatDebug
 
       - name: Collect APK, source overlay, and signing fingerprint
         shell: bash
@@ -262,18 +174,12 @@ jobs:
           set -euo pipefail
           mkdir -p artifact "$RUNNER_TEMP/raz-source-overlay"
           apk_name="RAZ-${RAZ_VERSION_NAME}-armv7-arm64.apk"
-          cp upstream/TMessagesProj_App/build/outputs/apk/afat/release/app.apk "artifact/$apk_name"
+          cp upstream/TMessagesProj_App/build/outputs/apk/afat/debug/app.apk "artifact/$apk_name"
           echo "Versioned APK: $apk_name"
           cp upstream-commit.txt artifact/
-          keytool -list -v -keystore "upstream/TMessagesProj/config/release.keystore" \
-            -storepass "$RAZ_RELEASE_STORE_PASSWORD" -alias "$RAZ_RELEASE_KEY_ALIAS" \
+          keytool -list -v -keystore "upstream/TMessagesProj/config/release.keystore" -storepass android -alias androidkey \
             | awk '/SHA256:/ {print $0}' > artifact/RAZ-signing-certificate-sha256.txt
           test -s artifact/RAZ-signing-certificate-sha256.txt
-          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose --print-certs "artifact/$apk_name"
-          unzip -Z1 "artifact/$apk_name" > "$RUNNER_TEMP/raz-apk-files.txt"
-          grep 'lib/armeabi-v7a/' "$RUNNER_TEMP/raz-apk-files.txt" >/dev/null
-          grep 'lib/arm64-v8a/' "$RUNNER_TEMP/raz-apk-files.txt" >/dev/null
-          echo "Validated APK signature and both ARM ABIs."
 
           overlay="$RUNNER_TEMP/raz-source-overlay"
           mkdir -p "$overlay/.github/workflows" "$overlay/assets/icons" "$overlay/config" "$overlay/scripts"
@@ -283,41 +189,21 @@ jobs:
           cp scripts/apply_branding.py "$overlay/scripts/"
           cp README.md LICENSE THIRD_PARTY_NOTICES.md BUILD_STATUS_FA.md "$overlay/"
           printf '%s\n' \
-            'RAZ - یادداشت انتشار عمومی' \
+            'RAZ - یادداشت امضای نسخه آزمایشی' \
             '' \
-            'این APK با کلید خصوصی اختصاصی RAZ امضا شده است؛ فایل کلید خصوصی داخل این بسته نیست.' \
-            'فینگرپرینت گواهی در RAZ-signing-certificate-sha256.txt درج شده است.' \
-            'برای انتشار بعدی باید همان کلید خصوصی محفوظ و به‌طور امن در GitHub Actions Secrets نگه‌داری شود.' \
-            'این پروژه کلاینت مستقل مبتنی بر سورس تلگرام است و محصول رسمی تلگرام نیست.' \
+            'این APK با keystore آزمایشیِ موجود در سورس pinned تلگرام امضا می‌شود؛ بیلدهای همین سورس اثرانگشت یکسان دارند.' \
+            'فینگرپرینت گواهی در فایل RAZ-signing-certificate-sha256.txt داخل بسته APK/Source artifact است.' \
+            'فایل keystore آزمایشی با نام RAZ-upstream-test-signing-key-reference به‌عنوان artifact جداگانه نگه‌داری می‌شود' \
+            'این کلید در سورس عمومی upstream موجود است و برای انتشار عمومی امن یا خصوصی محسوب نمی‌شود.' \
+            'این APK فقط برای تست است؛ برای انتشار عمومی باید کلید release اختصاصی RAZ را خصوصی نگه داشت.' \
+            'برای انتشار عمومی باید کلید release جداگانه، نگهداری امن آن و تنظیم secrets انجام شود.' \
             > "$overlay/SIGNING_NOTES_FA.txt"
           (cd "$overlay" && zip -qr "$GITHUB_WORKSPACE/artifact/RAZ-source-overlay.zip" .)
 
       - name: Upload RAZ APK and source files
         uses: actions/upload-artifact@v4
         with:
-          name: RAZ-public-release-armv7-arm64
+          name: RAZ-debug-armv7-arm64
           path: artifact/*
           if-no-files-found: error
           retention-days: 90
-
-      - name: Publish public RAZ release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          tag="v${RAZ_VERSION_NAME}"
-          apk_path="artifact/RAZ-${RAZ_VERSION_NAME}-armv7-arm64.apk"
-          notes="Public RAZ prerelease ${RAZ_VERSION_NAME} built from commit ${GITHUB_SHA}. The signed APK includes ARMv7 and ARM64 native libraries. RAZ is an independent Telegram-based client, not an official Telegram product. See the attached source overlay and third-party notices."
-
-          gh release create "$tag" "$apk_path" \
-            artifact/RAZ-source-overlay.zip \
-            artifact/RAZ-signing-certificate-sha256.txt \
-            artifact/upstream-commit.txt \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "RAZ ${RAZ_VERSION_NAME}" \
-            --notes "$notes" \
-            --prerelease
-          echo "Published public RAZ prerelease ${RAZ_VERSION_NAME}."
-
