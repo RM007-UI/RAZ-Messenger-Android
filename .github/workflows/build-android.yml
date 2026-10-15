@@ -114,18 +114,18 @@ jobs:
           run_number = int(os.environ["GITHUB_RUN_NUMBER"])
           run_attempt = int(os.environ["GITHUB_RUN_ATTEMPT"])
           version_name = f"3.13.{run_number}.{run_attempt}"
-          version_code_match = re.search(r"(?m)^APP_VERSION_CODE=(\\d+)$", source)
+          version_code_match = re.search(r"(?m)^APP_VERSION_CODE=(\d+)$", source)
           if not version_code_match:
               raise SystemExit("Could not find APP_VERSION_CODE in upstream gradle.properties")
           version_code = int(version_code_match.group(1)) + run_number * 100 + run_attempt
           source, name_count = re.subn(r"(?m)^APP_VERSION_NAME=.*$", f"APP_VERSION_NAME={version_name}", source, count=1)
-          source, code_count = re.subn(r"(?m)^APP_VERSION_CODE=\\d+$", f"APP_VERSION_CODE={version_code}", source, count=1)
+          source, code_count = re.subn(r"(?m)^APP_VERSION_CODE=\d+$", f"APP_VERSION_CODE={version_code}", source, count=1)
           if name_count != 1 or code_count != 1:
               raise SystemExit(f"Could not update RAZ version fields (name={name_count}, code={code_count})")
           properties.write_text(source, encoding="utf-8")
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
-              env.write(f"RAZ_VERSION_NAME={version_name}\\n")
-              env.write(f"RAZ_VERSION_CODE={version_code}\\n")
+              env.write(f"RAZ_VERSION_NAME={version_name}\n")
+              env.write(f"RAZ_VERSION_CODE={version_code}\n")
           print(f"RAZ app version: {version_name} (versionCode {version_code})")
           PY
 
