@@ -1,4 +1,4 @@
-name: Build RAZ Android APK
+name: Build RAZ public prerelease
 
 on:
   workflow_dispatch:
@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   build-universal:
-    name: Build debug APK (ARMv7 + ARM64)
+    name: Build signed release APK (ARMv7 + ARM64)
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     env:
@@ -174,7 +174,7 @@ jobs:
           )
           print("Validated the private RAZ release keystore and alias.")
 
-      - name: Configure debug build for ARMv7 + ARM64
+      - name: Configure ARMv7 + ARM64 native libraries
         shell: bash
         run: |
           set -euo pipefail
@@ -254,7 +254,7 @@ jobs:
       - name: Upload RAZ APK and source files
         uses: actions/upload-artifact@v4
         with:
-          name: RAZ-debug-armv7-arm64
+          name: RAZ-public-release-armv7-arm64
           path: artifact/*
           if-no-files-found: error
           retention-days: 90
@@ -280,10 +280,3 @@ jobs:
             --prerelease
           echo "Published public RAZ prerelease ${RAZ_VERSION_NAME}."
 
-      - name: Upload pinned upstream test signing keystore reference
-        uses: actions/upload-artifact@v4
-        with:
-          name: RAZ-upstream-test-signing-key-reference
-          path: upstream/TMessagesProj/config/release.keystore
-          if-no-files-found: error
-          retention-days: 90
