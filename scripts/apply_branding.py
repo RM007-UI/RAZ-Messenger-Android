@@ -635,6 +635,12 @@ def main() -> int:
         translate_button = translate_button.replace(old_menu_click, new_menu_click, 1)
     elif new_menu_click not in translate_button:
         raise RuntimeError("Could not remove the Premium gate from TranslateButton menu")
+    old_premium_menu_icon = "menuView.setImageResource(UserConfig.getInstance(currentAccount).isPremium() || chat != null && chat.autotranslation ? R.drawable.msg_mini_customize : R.drawable.msg_close);"
+    new_premium_menu_icon = "menuView.setImageResource(R.drawable.msg_mini_customize);"
+    if old_premium_menu_icon in translate_button:
+        translate_button = translate_button.replace(old_premium_menu_icon, new_premium_menu_icon, 1)
+    elif new_premium_menu_icon not in translate_button:
+        raise RuntimeError("Could not remove Premium-dependent icon from translation menu")
     translate_button_path.write_text(translate_button, encoding="utf-8")
 
     # Remove the Premium upsell from the full-chat translation toggle.
@@ -703,6 +709,14 @@ def main() -> int:
         language_select = language_select.replace(old_settings_premium_gate, new_settings_premium_gate, 1)
     elif new_settings_premium_gate not in language_select:
         raise RuntimeError("Could not remove the remaining Premium gate from translation settings")
+
+    # Do not visually mark full-chat translation as Premium-locked in RAZ.
+    old_locked_translate_icon = "cell.setCheckBoxIcon(!getUserConfig().isPremium() ? R.drawable.permission_locked : 0);"
+    new_locked_translate_icon = "cell.setCheckBoxIcon(0);"
+    if old_locked_translate_icon in language_select:
+        language_select = language_select.replace(old_locked_translate_icon, new_locked_translate_icon, 1)
+    elif new_locked_translate_icon not in language_select:
+        raise RuntimeError("Could not remove the Premium lock icon from translation settings")
     language_select_path.write_text(language_select, encoding="utf-8")
 
     # Refine the conversation identity header toward Telegram iOS: a distinct, compact
