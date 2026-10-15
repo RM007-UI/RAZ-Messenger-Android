@@ -20,34 +20,38 @@ RAZ is an independent Android client based on the official [Telegram for Android
 
 The design takes inspiration from Apple's Liquid Glass guidance for navigation and controls, but RAZ uses Android-native rendering and its own assets. Apple's San Francisco font files are not bundled.
 
-## Build a test APK
+## Public GitHub prerelease
 
-1. Open the repository's **Actions** tab.
-2. Select **Build RAZ Android APK**.
-3. Press **Run workflow**.
-4. When the run succeeds, download the `RAZ-debug-armv7-arm64` artifact. It is configured to contain both `armeabi-v7a` (32-bit ARM) and `arm64-v8a` (64-bit ARM).
+RAZ is configured to publish a **public GitHub prerelease** containing a signed, universal APK plus the customization source overlay. It must not fall back to Telegram's sample API credentials or the publicly known upstream test keystore.
 
-The normal workflow downloads the pinned Telegram Android source, applies RAZ branding, configures both `armeabi-v7a` and `arm64-v8a`, and creates a debug-signed multi-ABI test APK. Each build pins the same upstream source and uses the same upstream test keystore, so update signatures are consistent across test builds.
+Before the first public release, add these **GitHub Actions repository secrets** in **Settings → Secrets and variables → Actions**:
 
-## Telegram API credentials and public distribution
+- `TG_API_ID` — the application ID created for RAZ at [my.telegram.org](https://my.telegram.org).
+- `TG_API_HASH` — the matching application hash from the same application.
+- `RAZ_RELEASE_KEYSTORE_BASE64` — a single-line Base64 encoding of RAZ's private release keystore.
+- `RAZ_RELEASE_STORE_PASSWORD` — that keystore's store password.
+- `RAZ_RELEASE_KEY_ALIAS` — the key alias inside the keystore.
+- `RAZ_RELEASE_KEY_PASSWORD` — the private key password.
 
-The initial test build used the sample API credentials in the pinned upstream source; sign-in and messaging worked in the user's device test. That does not make sample credentials appropriate for distributing an app. Before a public release:
+Create a new private release keystore and keep an offline backup safe. For example, run this locally with Java's `keytool` and choose strong, unique passwords when prompted:
 
-1. Obtain and use RAZ's own `TG_API_ID` and `TG_API_HASH` from [my.telegram.org](https://my.telegram.org).
-2. Keep credentials in GitHub Actions secrets, never in source control.
-3. Configure RAZ's own Firebase services if push notifications are required.
-4. Set up a stable release-signing key, release versioning, privacy policy, and a tested update process.
-5. Follow Telegram's branding requirements and comply with the upstream GPL-2.0-or-later license, including providing the corresponding modified source and required notices.
+```sh
+keytool -genkeypair -v -keystore raz-release.jks -alias raz-release -keyalg RSA -keysize 3072 -validity 10000
+```
 
-The workflow still permits a test-only build with upstream sample credentials when both secrets are absent. Do not distribute that test build publicly.
+Encode the keystore as a **single line** before pasting it into the `RAZ_RELEASE_KEYSTORE_BASE64` secret:
 
-## Signing consistency and public release
+- Linux/Termux: `base64 -w0 raz-release.jks`
+- macOS: `base64 -i raz-release.jks | tr -d '\\n'`
+- PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("raz-release.jks"))`
 
-The pinned upstream Telegram Android source explicitly configures the debug APK to use `TMessagesProj/config/release.keystore` with alias `androidkey`. Because each RAZ build downloads the same pinned upstream commit, that signing identity remains the same between these test builds, so a new test APK should update the currently installed RAZ without a signature-mismatch uninstall.
+Do not commit the keystore or any passwords/Base64 private-key content into the repository, and do not paste them into chat. Keep the original `.jks` file as an offline backup; **all future updates must use the exact same release key** or Android will reject the update over an already-installed release.
 
-Important security distinction: this is a keystore shipped in the public upstream source, not a private RAZ release key. It is suitable only for internal/test builds and must not be used for a public distribution. A real public release needs a newly generated RAZ-owned release keystore kept out of source control and supplied to GitHub Actions through secrets.
+When all six secrets are present and valid, the workflow builds the non-debug `AfatRelease` variant, verifies its signature and both `armeabi-v7a`/32-bit and `arm64-v8a`/64-bit native libraries, then publishes a publicly downloadable GitHub prerelease. Each APK receives a unique version string and filename to avoid reinstalling an old build accidentally. GitHub Actions retains the run artifact for 90 days as a backup; the Release is the durable download location.
 
-The APK artifact contains `RAZ-source-overlay.zip` with the important project customization files and `RAZ-signing-certificate-sha256.txt` so the signing identity can be compared across builds. A separate `RAZ-upstream-test-signing-key-reference` artifact backs up the actual test keystore used for reproducible test builds.
+The current workflow deliberately **fails before building** when any required credential is missing. This prevents accidentally publishing a test APK using Telegram's public sample credentials or upstream's publicly available test signing key. Configure the secrets first, then run **Actions → Build RAZ public prerelease → Run workflow**, or push an intended release change to `main`.
+
+RAZ is an independent Android client based on Telegram's GPL-2.0-or-later source, not an official Telegram product. A public binary release must be accompanied by the corresponding modified source and required third-party notices. See `LICENSE` and `THIRD_PARTY_NOTICES.md`.
 
 ## Translation and proxy compatibility
 
