@@ -494,7 +494,7 @@ def main() -> int:
     translate_alert2_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/Components/TranslateAlert2.java"
     translate_alert2 = translate_alert2_path.read_text(encoding="utf-8")
     old_single_message_request = re.compile(
-        r"(?ms)^        TLRPC\\.TL_messages_translateText req = new TLRPC\\.TL_messages_translateText\\(\\);.*?^        \\}\\);\\n    \\}"
+        r"(?ms)^        TLRPC\.TL_messages_translateText req = new TLRPC\.TL_messages_translateText\(\);.*?^        \}\);\n    \}"
     )
     new_single_message_request = """        // RAZ: use the existing online fallback instead of Telegram's Premium translateText endpoint.
         translateAlt();
