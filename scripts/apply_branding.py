@@ -499,10 +499,33 @@ def main() -> int:
     elif new_context_translate_default not in translate_controller:
         raise RuntimeError("Could not enable Telegram's native per-message Translate action")
 
-    # RAZ exposes the built-in full-chat translation controller in chats without Telegram Premium.
-    # Keep Telegram's server-side auto-translation availability flag and user setting intact.
+    # RAZ chat translation is available without Telegram Premium. The native top bar still
+    # respects the user's on/off preference, but not Telegram's server-side Premium gate.
+    old_feature_available = """    public boolean isFeatureAvailable() {
+        return isChatTranslateEnabled() && UserConfig.getInstance(currentAccount).isPremium();
+    }"""
+    new_feature_available = """    public boolean isFeatureAvailable() {
+        return isChatTranslateEnabled();
+    }"""
+    if old_feature_available in translate_controller:
+        translate_controller = translate_controller.replace(old_feature_available, new_feature_available, 1)
+    elif new_feature_available not in translate_controller:
+        raise RuntimeError("Could not remove the Premium gate from isFeatureAvailable()")
+
+    old_chat_translate_gate = """    public boolean isChatTranslateEnabled() {
+        if (!getMessagesController().isTranslationsAutoEnabled()) {
+            return false;
+        }
+        if (chatTranslateEnabled == null) {"""
+    new_chat_translate_gate = """    public boolean isChatTranslateEnabled() {
+        if (chatTranslateEnabled == null) {"""
+    if old_chat_translate_gate in translate_controller:
+        translate_controller = translate_controller.replace(old_chat_translate_gate, new_chat_translate_gate, 1)
+    elif new_chat_translate_gate not in translate_controller:
+        raise RuntimeError("Could not remove the server feature gate from isChatTranslateEnabled()")
+
     new_dialog_feature_available = """    public boolean isFeatureAvailable(long dialogId) {
-        return getMessagesController().isTranslationsAutoEnabled() && isChatTranslateEnabled();
+        return isChatTranslateEnabled();
     }"""
     feature_gate_pattern = r"(?ms)^    public boolean isFeatureAvailable\(long dialogId\) \{\n.*?^    \}"
     translate_controller, feature_gate_count = re.subn(
@@ -512,7 +535,18 @@ def main() -> int:
         count=1,
     )
     if feature_gate_count != 1 and new_dialog_feature_available not in translate_controller:
-        raise RuntimeError("Could not enable RAZ chat translation in TranslateController")
+        raise RuntimeError("Could not remove the Premium gate from dialog translation")
+
+    # Telegram already includes an online Google Translate fallback. Route full-chat message
+    # translations through that existing path instead of messages.translateText, which can
+    # require Telegram Premium. This sends message text to Google's translation endpoint.
+    old_translation_mode = "final String method = getMessagesController().translationsAutoEnabled;"
+    new_translation_mode = 'final String method = "alternative"; // RAZ: use online translation without Telegram Premium'
+    if old_translation_mode in translate_controller:
+        translate_controller = translate_controller.replace(old_translation_mode, new_translation_mode, 1)
+    elif new_translation_mode not in translate_controller:
+        raise RuntimeError("Could not route full-chat translation through the online fallback")
+
     translate_controller_path.write_text(translate_controller, encoding="utf-8")
 
     # Always show the native translation bar in a conversation unless the user explicitly hid it.
@@ -567,7 +601,45 @@ def main() -> int:
         translate_button = translate_button.replace(old_update_colors, new_update_colors, 1)
     elif new_update_colors not in translate_button:
         raise RuntimeError("Could not locate Telegram TranslateButton color styling")
+    # Keep the translation settings menu accessible without Premium.
+    old_menu_click = """        menuView.setOnClickListener(e -> {
+            final TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(-dialogId);
+            if (UserConfig.getInstance(currentAccount).isPremium() || chat != null && chat.autotranslation) {
+                onMenuClick();
+            } else {
+                onCloseClick();
+            }
+        });"""
+    new_menu_click = "        menuView.setOnClickListener(e -> onMenuClick());"
+    if old_menu_click in translate_button:
+        translate_button = translate_button.replace(old_menu_click, new_menu_click, 1)
+    elif new_menu_click not in translate_button:
+        raise RuntimeError("Could not remove the Premium gate from TranslateButton menu")
     translate_button_path.write_text(translate_button, encoding="utf-8")
+
+    # Remove the Premium upsell from the full-chat translation toggle.
+    translate_alert_path = upstream / "TMessagesProj/src/main/java/org/telegram/ui/Components/TranslateAlert3.java"
+    translate_alert = translate_alert_path.read_text(encoding="utf-8")
+    old_alert_premium_gate = """            } else if (item.id == 2) {
+                if (!UserConfig.getInstance(currentAccount).isPremium()) {
+                    final BaseFragment fragment = LaunchActivity.getSafeLastFragment();
+                    if (fragment == null) return;
+                    new PremiumFeatureBottomSheet(getContext(), PremiumPreviewFragment.PREMIUM_FEATURE_TRANSLATIONS, true, resourcesProvider)
+                        .show();
+                    return;
+                }
+                MessagesController.getInstance(currentAccount).getTranslateController().toggleTranslatingDialog(dialogId);
+                dismiss();
+            }"""
+    new_alert_premium_gate = """            } else if (item.id == 2) {
+                MessagesController.getInstance(currentAccount).getTranslateController().toggleTranslatingDialog(dialogId);
+                dismiss();
+            }"""
+    if old_alert_premium_gate in translate_alert:
+        translate_alert = translate_alert.replace(old_alert_premium_gate, new_alert_premium_gate, 1)
+    elif new_alert_premium_gate not in translate_alert:
+        raise RuntimeError("Could not remove the Premium gate from full-chat translation dialog")
+    translate_alert_path.write_text(translate_alert, encoding="utf-8")
 
     # Refine the conversation identity header toward Telegram iOS: a distinct, compact
     # profile image followed by a clear title/status stack. Keep native click targets intact.
