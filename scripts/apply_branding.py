@@ -501,22 +501,17 @@ def main() -> int:
 
     # RAZ exposes the built-in full-chat translation controller in chats without Telegram Premium.
     # Keep Telegram's server-side auto-translation availability flag and user setting intact.
-    old_dialog_feature_available = """    public boolean isFeatureAvailable(long dialogId) {
-        if (!getMessagesController().isTranslationsAutoEnabled()) {
-            return false;
-        }
-        final TLRPC.Chat chat = getMessagesController().getChat(-dialogId);
-        return (
-            UserConfig.getInstance(currentAccount).isPremium() ||
-            chat != null && chat.autotranslation
-        );
-    }"""
     new_dialog_feature_available = """    public boolean isFeatureAvailable(long dialogId) {
         return getMessagesController().isTranslationsAutoEnabled() && isChatTranslateEnabled();
     }"""
-    if old_dialog_feature_available in translate_controller:
-        translate_controller = translate_controller.replace(old_dialog_feature_available, new_dialog_feature_available, 1)
-    elif new_dialog_feature_available not in translate_controller:
+    feature_gate_pattern = r"(?ms)^    public boolean isFeatureAvailable\\(long dialogId\\) \\{\\n.*?^    \\}"
+    translate_controller, feature_gate_count = re.subn(
+        feature_gate_pattern,
+        lambda match: new_dialog_feature_available,
+        translate_controller,
+        count=1,
+    )
+    if feature_gate_count != 1 and new_dialog_feature_available not in translate_controller:
         raise RuntimeError("Could not enable RAZ chat translation in TranslateController")
     translate_controller_path.write_text(translate_controller, encoding="utf-8")
 
